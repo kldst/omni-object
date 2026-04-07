@@ -3,7 +3,10 @@
 
 import os
 import gc
+from collections import Counter
 from pathlib import Path
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 import torch
 import wandb
@@ -32,9 +35,19 @@ from train_utils import (
     load_model,
     build_optimizer,
     build_loss_criterion,
+    summarize_and_dump_model,
 )
 
 logger = get_logger(__name__, log_level="INFO")
+
+
+def _unwrap_dataset(dataset):
+    current = dataset
+    wrappers = []
+    while hasattr(current, "dataset"):
+        wrappers.append(type(current).__name__)
+        current = current.dataset
+    return current, wrappers
 
 
 if __name__ == '__main__':
@@ -87,6 +100,13 @@ if __name__ == '__main__':
         num_workers=cfg.get("num_workers", 8),
         test=False
     )
+    raw_dataset = getattr(train_dataloader, "dataset", None)
+    raw_sampler = getattr(train_dataloader, "sampler", None)
+    dataset_num_samples = len(raw_dataset) if raw_dataset is not None else None
+    sampler_num_samples = len(raw_sampler) if raw_sampler is not None else None
+    base_dataset, dataset_wrappers = _unwrap_dataset(raw_dataset) if raw_dataset is not None else (None, [])
+    base_records = getattr(base_dataset, "records", None) if base_dataset is not None else None
+    run_counter = Counter(record["run_name"] for record in base_records) if base_records is not None else Counter()
     
     # ======================================================
     # 3. Optimizer and Loss
@@ -94,6 +114,9 @@ if __name__ == '__main__':
     
     # Build optimizer
     optimizer = build_optimizer(model, cfg)
+
+    if accelerator.is_main_process:
+        summarize_and_dump_model(model, save_dir=save_dir, logger_obj=logger)
     
     # Build loss criterion
     train_criterion = build_loss_criterion(cfg)
@@ -118,6 +141,25 @@ if __name__ == '__main__':
     
     logger.info("Training steps calculation (AFTER Accelerate sharding):")
     logger.info(f"  World size: {world_size}")
+    if dataset_wrappers:
+        logger.info(f"  Dataset wrappers: {dataset_wrappers}")
+    if base_dataset is not None:
+        logger.info(f"  Base dataset type: {type(base_dataset).__name__}")
+    if base_records is not None:
+        logger.info(f"  Base dataset raw samples: {len(base_records)}")
+        logger.info(f"  Base dataset unique runs: {len(run_counter)}")
+        if run_counter:
+            run_object_counts = list(run_counter.values())
+            logger.info(
+                "  Objects per run stats: "
+                f"min={min(run_object_counts)} "
+                f"max={max(run_object_counts)} "
+                f"mean={sum(run_object_counts) / len(run_object_counts):.2f}"
+            )
+    if dataset_num_samples is not None:
+        logger.info(f"  Dataset total samples: {dataset_num_samples}")
+    if sampler_num_samples is not None:
+        logger.info(f"  Sampler samples per epoch (before Accelerate sharding): {sampler_num_samples}")
     logger.info(f"  Actual local batches: {actual_local_batches}")
     logger.info(f"  Gradient accumulation steps: {gradient_accumulation_steps}")
     logger.info(f"  Steps per epoch (per process): {local_steps_per_epoch}")
@@ -167,6 +209,25 @@ if __name__ == '__main__':
     logger.info("Training Configuration Summary")
     logger.info("=" * 60)
     logger.info(f"  Number of epochs: {cfg.get('num_train_epochs')}")
+    if dataset_wrappers:
+        logger.info(f"  Dataset wrappers: {dataset_wrappers}")
+    if base_dataset is not None:
+        logger.info(f"  Base dataset type: {type(base_dataset).__name__}")
+    if base_records is not None:
+        logger.info(f"  Base dataset raw samples: {len(base_records)}")
+        logger.info(f"  Base dataset unique runs: {len(run_counter)}")
+        if run_counter:
+            run_object_counts = list(run_counter.values())
+            logger.info(
+                "  Objects per run stats: "
+                f"min={min(run_object_counts)} "
+                f"max={max(run_object_counts)} "
+                f"mean={sum(run_object_counts) / len(run_object_counts):.2f}"
+            )
+    if dataset_num_samples is not None:
+        logger.info(f"  Dataset total samples: {dataset_num_samples}")
+    if sampler_num_samples is not None:
+        logger.info(f"  Sampler samples per epoch: {sampler_num_samples}")
     logger.info(f"  Examples per epoch (this process): {len(train_dataloader)}")
     logger.info(f"  Steps per epoch (this process): {local_steps_per_epoch}")
     logger.info(f"  Total training steps (this process): {total_training_steps}")
@@ -220,7 +281,8 @@ if __name__ == '__main__':
         
         # Training loop for this epoch
         for step, batch in enumerate(train_iter, start=step_in_epoch):
-            batch = merge_dicts(batch)
+            if isinstance(batch, list):
+                batch = merge_dicts(batch)
             
             # Normalize camera extrinsics and points for loss computation
             new_extrinsics, _, new_world_points, new_depths = normalize_camera_extrinsics_and_points_batch(
@@ -249,6 +311,8 @@ if __name__ == '__main__':
                 'depth': input_depths,
                 'mask': input_mask
             }
+            if 'object_images' in batch:
+                inputs['object_images'] = batch['object_images']
             predictions = model(**inputs)
             
             # Compute loss

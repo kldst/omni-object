@@ -7,9 +7,7 @@
 import logging
 import torch
 import torch.nn as nn
-from typing import Tuple, List
-import random
-import numpy as np
+from typing import Tuple, List, Optional, Callable, Any
 
 from omnivggt.layers import PatchEmbed
 from omnivggt.layers.block import Block
@@ -205,6 +203,11 @@ class Aggregator(nn.Module):
     def forward(
         self,
         images: torch.Tensor,
+        *,
+        layer_postprocessor: Optional[Callable[[int, torch.Tensor, int], torch.Tensor]] = None,
+        return_layer_tokens: bool = False,
+        layer_token_indices: Optional[List[int]] = None,
+        collect_output_list: bool = True,
     ) -> Tuple[List[torch.Tensor], int]:
         """
         Args:
@@ -216,67 +219,143 @@ class Aggregator(nn.Module):
                 The list of outputs from the attention blocks,
                 and the patch_start_idx indicating where patch tokens begin.
         """
+        B, S, _, H, W = images.shape
+        patch_tokens = self.embed_images(images)
+        return self.forward_from_patch_tokens(
+            patch_tokens,
+            batch_size=B,
+            seq_len=S,
+            height=H,
+            width=W,
+            layer_postprocessor=layer_postprocessor,
+            return_layer_tokens=return_layer_tokens,
+            layer_token_indices=layer_token_indices,
+            collect_output_list=collect_output_list,
+        )
+
+    def embed_images(self, images: torch.Tensor) -> torch.Tensor:
         B, S, C_in, H, W = images.shape
 
         if C_in != 3:
             raise ValueError(f"Expected 3 input channels, got {C_in}")
 
-        # Normalize images and reshape for patch embed
         images = (images - self._resnet_mean) / self._resnet_std
-
-        # Reshape to [B*S, C, H, W] for patch embedding
         images = images.view(B * S, C_in, H, W)
         patch_tokens = self.patch_embed(images)
 
         if isinstance(patch_tokens, dict):
             patch_tokens = patch_tokens["x_norm_patchtokens"]
 
-        _, P, C = patch_tokens.shape
+        return patch_tokens
 
-        # Expand camera and register tokens to match batch size and sequence length
+    def prepare_tokens_from_patch_tokens(
+        self,
+        patch_tokens: torch.Tensor,
+        *,
+        batch_size: int,
+        seq_len: int,
+        height: int,
+        width: int,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        B = batch_size
+        S = seq_len
+
         camera_token = slice_expand_and_flatten(self.camera_token, B, S)
         register_token = slice_expand_and_flatten(self.register_token, B, S)
-
-        # Concatenate special tokens with patch tokens
         tokens = torch.cat([camera_token, register_token, patch_tokens], dim=1)
 
         pos = None
         if self.rope is not None:
-            pos = self.position_getter(B * S, H // self.patch_size, W // self.patch_size, device=images.device)
+            pos = self.position_getter(B * S, height // self.patch_size, width // self.patch_size, device=patch_tokens.device)
 
-        if self.patch_start_idx > 0:
+        if self.patch_start_idx > 0 and pos is not None:
             pos = pos + 1
-            pos_special = torch.zeros(B * S, self.patch_start_idx, 2).to(images.device).to(pos.dtype)
+            pos_special = torch.zeros(B * S, self.patch_start_idx, 2, device=patch_tokens.device, dtype=pos.dtype)
             pos = torch.cat([pos_special, pos], dim=1)
 
-        # update P because we added special tokens
-        _, P, C = tokens.shape
+        return tokens, pos
 
+    def forward_from_patch_tokens(
+        self,
+        patch_tokens: torch.Tensor,
+        *,
+        batch_size: int,
+        seq_len: int,
+        height: int,
+        width: int,
+        layer_postprocessor: Optional[Callable[[int, torch.Tensor, int], torch.Tensor]] = None,
+        return_layer_tokens: bool = False,
+        layer_token_indices: Optional[List[int]] = None,
+        collect_output_list: bool = True,
+    ) -> Tuple[List[torch.Tensor], int]:
+        B = batch_size
+        S = seq_len
+        tokens, pos = self.prepare_tokens_from_patch_tokens(
+            patch_tokens,
+            batch_size=B,
+            seq_len=S,
+            height=height,
+            width=width,
+        )
+
+        _, P, C = tokens.shape
         frame_idx = 0
         global_idx = 0
-        output_list = []
+        output_list = [] if collect_output_list else None
+        selected_layer_indices = None if layer_token_indices is None else set(int(idx) for idx in layer_token_indices)
+        layer_tokens: Any = None
+        if return_layer_tokens:
+            layer_tokens = [] if selected_layer_indices is None else {}
+        logical_layer_idx = 0
+        last_attn_type = self.aa_order[-1]
 
         for _ in range(self.aa_block_num):
-            for attn_type in self.aa_order:
-                if attn_type == "frame":
-                    tokens, frame_idx, frame_intermediates = self._process_frame_attention(
-                        tokens, B, S, P, C, frame_idx, pos=pos
-                    )
-                elif attn_type == "global":
-                    tokens, global_idx, global_intermediates = self._process_global_attention(
-                        tokens, B, S, P, C, global_idx, pos=pos
-                    )
-                else:
-                    raise ValueError(f"Unknown attention type: {attn_type}")
+            for _ in range(self.aa_block_size):
+                frame_tokens = None
+                global_tokens = None
 
-            for i in range(len(frame_intermediates)):
-                # concat frame and global intermediates, [B x S x P x 2C]
-                concat_inter = torch.cat([frame_intermediates[i], global_intermediates[i]], dim=-1)
-                output_list.append(concat_inter)
+                for attn_type in self.aa_order:
+                    if attn_type == "frame":
+                        tokens, frame_idx, frame_tokens = self._process_frame_attention(tokens, B, S, P, C, frame_idx, pos=pos)
+                    elif attn_type == "global":
+                        tokens, global_idx, global_tokens = self._process_global_attention(tokens, B, S, P, C, global_idx, pos=pos)
+                    else:
+                        raise ValueError(f"Unknown attention type: {attn_type}")
 
-        del concat_inter
-        del frame_intermediates
-        del global_intermediates
+                if frame_tokens is None and global_tokens is None:
+                    raise RuntimeError("Aggregator step produced no tokens")
+                if frame_tokens is None:
+                    frame_tokens = global_tokens
+                if global_tokens is None:
+                    global_tokens = frame_tokens
+
+                current_tokens = global_tokens if last_attn_type == "global" else frame_tokens
+                if layer_postprocessor is not None:
+                    current_tokens = layer_postprocessor(logical_layer_idx, current_tokens, self.patch_start_idx)
+                    if current_tokens.shape != (B, S, P, C):
+                        raise ValueError(
+                            f"layer_postprocessor must return shape {(B, S, P, C)}, got {tuple(current_tokens.shape)}"
+                        )
+                    if last_attn_type == "global":
+                        global_tokens = current_tokens
+                        tokens = current_tokens.reshape(B, S * P, C)
+                    else:
+                        frame_tokens = current_tokens
+                        tokens = current_tokens.reshape(B * S, P, C)
+
+                if collect_output_list:
+                    output_list.append(torch.cat([frame_tokens, global_tokens], dim=-1))
+
+                if return_layer_tokens and (selected_layer_indices is None or logical_layer_idx in selected_layer_indices):
+                    if selected_layer_indices is None:
+                        layer_tokens.append(current_tokens)
+                    else:
+                        layer_tokens[logical_layer_idx] = current_tokens
+
+                logical_layer_idx += 1
+
+        if return_layer_tokens:
+            return output_list, self.patch_start_idx, layer_tokens
         return output_list, self.patch_start_idx
 
     def _process_frame_attention(self, tokens, B, S, P, C, frame_idx, pos=None):
@@ -290,24 +369,19 @@ class Aggregator(nn.Module):
         if pos is not None and pos.shape != (B * S, P, 2):
             pos = pos.view(B, S, P, 2).view(B * S, P, 2)
 
-        intermediates = []
+        blk = self.frame_blocks[frame_idx]
+        if self.use_checkpoint and self.training:
+            tokens = checkpoint(
+                lambda inp, p: blk(inp, pos=p,),
+                tokens,
+                pos,
+                use_reentrant=False
+            )
+        else:
+            tokens = blk(tokens, pos=pos,)
+        frame_idx += 1
 
-        # by default, self.aa_block_size=1, which processes one block at a time
-        for _ in range(self.aa_block_size):
-            blk = self.frame_blocks[frame_idx]
-            if self.use_checkpoint and self.training:
-                tokens = checkpoint(
-                    lambda inp, p: blk(inp, pos=p,),
-                    tokens,
-                    pos,
-                    use_reentrant=False
-                )
-            else:
-                tokens = blk(tokens, pos=pos,)
-            frame_idx += 1
-            intermediates.append(tokens.view(B, S, P, C))
-
-        return tokens, frame_idx, intermediates
+        return tokens, frame_idx, tokens.view(B, S, P, C)
 
     def _process_global_attention(self, tokens, B, S, P, C, global_idx,
                                   pos=None, pose_encoding=None, depth_encoding=None):
@@ -320,25 +394,20 @@ class Aggregator(nn.Module):
         if pos is not None and pos.shape != (B, S * P, 2):
             pos = pos.view(B, S, P, 2).view(B, S * P, 2)
 
-        intermediates = []
+        blk = self.global_blocks[global_idx]   
+        if self.use_checkpoint and self.training:
+            tokens = checkpoint(
+                lambda inp, p: blk(inp, pos=p, ),        
+                tokens,
+                pos,
+                use_reentrant=False
+            )
+        else:
+            tokens = blk(tokens, pos=pos, )
 
-        # by default, self.aa_block_size=1, which processes one block at a time
-        for _ in range(self.aa_block_size):
-            blk = self.global_blocks[global_idx]   
-            if self.use_checkpoint and self.training:
-                tokens = checkpoint(
-                    lambda inp, p: blk(inp, pos=p, ),        
-                    tokens,
-                    pos,
-                    use_reentrant=False
-                )
-            else:
-                tokens = blk(tokens, pos=pos, )
+        global_idx += 1
 
-            global_idx += 1
-            intermediates.append(tokens.view(B, S, P, C))
-
-        return tokens, global_idx, intermediates
+        return tokens, global_idx, tokens.view(B, S, P, C)
     
 def slice_expand_and_flatten(token_tensor, B, S):
     """

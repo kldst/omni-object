@@ -24,13 +24,16 @@ class MultitaskLoss(torch.nn.Module):
     - Point loss
     - Tracking loss (not cleaned yet, dirty code is at the bottom of this file)
     """
-    def __init__(self, camera=None, depth=None, point=None, track=None, **kwargs):
+    def __init__(self, camera=None, depth=None, point=None, track=None, object_srt=None,
+                 debug_force_model_output_to_ground_truth=False, **kwargs):
         super().__init__()
         # Loss configuration dictionaries for each task
         self.camera = camera
         self.depth = depth
         self.point = point
         self.track = track
+        self.object_srt = object_srt
+        self.debug_force_model_output_to_ground_truth = bool(debug_force_model_output_to_ground_truth)
 
     def forward(self, predictions, batch) -> torch.Tensor:
         """
@@ -68,10 +71,101 @@ class MultitaskLoss(torch.nn.Module):
             point_loss = point_loss * self.point["weight"]
             total_loss = total_loss + point_loss
             loss_dict.update(point_loss_dict)
+
+        if "object_pose" in predictions and self.object_srt is not None:
+            object_srt_loss_dict = compute_object_srt_loss(
+                predictions,
+                batch,
+                debug_force_model_output_to_ground_truth=self.debug_force_model_output_to_ground_truth,
+                **self.object_srt,
+            )
+            total_loss = total_loss + object_srt_loss_dict["loss_object_srt"] * self.object_srt["weight"]
+            loss_dict.update(object_srt_loss_dict)
         
         loss_dict["objective"] = total_loss
 
         return loss_dict
+
+
+def _rotation_matrix_to_rot6d(rotation_matrix: torch.Tensor) -> torch.Tensor:
+    return rotation_matrix[..., :, :2].reshape(*rotation_matrix.shape[:-2], 6)
+
+
+def _vector_loss(pred: torch.Tensor, gt: torch.Tensor, loss_type: str = "l1") -> torch.Tensor:
+    if loss_type == "l1":
+        return (pred - gt).abs().mean()
+    if loss_type == "l2":
+        return ((pred - gt) ** 2).mean()
+    raise ValueError(f"Unknown loss_type: {loss_type}")
+
+
+def compute_object_srt_loss(
+    predictions,
+    batch,
+    loss_type="l1",
+    weight_pose=1.0,
+    weight_translation=1.0,
+    init_w=1.0,
+    debug_force_model_output_to_ground_truth=False,
+    **kwargs,
+):
+    pred_pose = predictions["object_pose"]
+    pred_translation = predictions["object_translation"]
+    pred_pose_0 = predictions.get("pred_pose_0", None)
+
+    gt_rot = batch["object_rotation"]
+    gt_pose = _rotation_matrix_to_rot6d(gt_rot)
+    gt_translation = batch["object_translation"]
+
+    if debug_force_model_output_to_ground_truth and not getattr(
+        compute_object_srt_loss, "_dtype_logged_once", False
+    ):
+        print(
+            "[DebugDType][object_srt] "
+            f"pred_pose={pred_pose.dtype}, gt_pose={gt_pose.dtype}, "
+            f"pred_translation={pred_translation.dtype}, gt_translation={gt_translation.dtype}",
+            flush=True,
+        )
+        compute_object_srt_loss._dtype_logged_once = True
+
+    has_object = batch.get("has_object", None)
+    if has_object is not None:
+        valid_mask = has_object.bool()
+        if valid_mask.sum() == 0:
+            dummy = (pred_pose * 0).mean()
+            return {
+                "loss_object_srt": dummy,
+                "loss_object_pose": dummy,
+                "loss_object_translation": dummy,
+                "loss_object_pose_init": dummy,
+            }
+        pred_pose = pred_pose[valid_mask]
+        pred_translation = pred_translation[valid_mask]
+        gt_pose = gt_pose[valid_mask]
+        gt_translation = gt_translation[valid_mask]
+        if pred_pose_0 is not None:
+            pred_pose_0 = pred_pose_0[valid_mask]
+
+    loss_pose = _vector_loss(pred_pose, gt_pose, loss_type=loss_type)
+    loss_translation = _vector_loss(pred_translation, gt_translation, loss_type=loss_type)
+
+    if pred_pose_0 is not None:
+        loss_pose_init = _vector_loss(pred_pose_0, gt_pose, loss_type=loss_type)
+    else:
+        loss_pose_init = (pred_pose * 0).mean()
+
+    total = (
+        weight_pose * loss_pose
+        + weight_translation * loss_translation
+        + float(init_w) * loss_pose_init
+    )
+
+    return {
+        "loss_object_srt": total,
+        "loss_object_pose": loss_pose,
+        "loss_object_translation": loss_translation,
+        "loss_object_pose_init": loss_pose_init,
+    }
 
 
 def compute_camera_loss(

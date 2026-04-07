@@ -2,60 +2,84 @@
 # OmniVGGT Training Configuration
 # ======================================================
 
+# python train_omnivggt.py --config configs/train.py
+
 # == Common Configuration ==
 output_dir = "outputs"
-exp_name = "omnivggt"
+exp_name = "0405_omnivggt_single_image_pose_5sameobject"
 logging_dir = "logs"
 
 # == Logging Configuration ==
-wandb = False
-tensorboard = True
+wandb = True
+tensorboard = False
 report_to = "tensorboard"
-num_save_log = 10
+num_save_log = 1
 num_save_visual = 5000
-checkpointing_steps = 10000
+checkpointing_steps = 2000
 
 # == Model Configuration ==
-model_url = "https://huggingface.co/facebook/VGGT-1B/resolve/main/model.pt"
+model_url = "/mnt/train-data-4-hdd/yian/6dpose_obj/OmniVGGT-official/checkpoints/OmniVGGT.safetensors"
 model_load_strict = False
-model_requires_grad = True
-enable_point = True
+model_requires_grad = False
+patch_embed_freeze = True
+enable_point = False
 enable_depth = True
-enable_camera = True
+enable_camera = False
+enable_object_srt = True
+object_srt_head_freeze = False
+enable_multi_layer_object_prototype_cross_attn = True
+object_cross_attn_freeze = False
+object_prototype_poolers_freeze = False
+object_prototype_layer_indices = (4, 11, 17, 23)
+object_prototype_num_tokens = 32
+object_prototype_object_encoder_no_grad = True
+object_cross_attn_heads = 16
+object_pose_context_pool = "flatten"
+object_pose_use_global_scene_object_concat = False
+object_pose_transformer_depth = 6
+object_pose_transformer_heads = 8
+object_pose_transformer_mlp_dim = 1024
+object_pose_transformer_dim_head = 64
+object_pose_transformer_dropout = 0.0
+object_pose_transformer_emb_dropout = 0.0
+object_pose_transformer_norm = "layer"
+object_pose_transformer_dim = 1024
+object_pose_ief_iters = 1
+object_pose_init_params_path = None
 
 # == Training Configuration ==
 mixed_precision = "bf16"  # Options: "no", "fp16", "bf16"
 seed = 42
-num_train_epochs = 10
-gradient_accumulation_steps = 2
+num_train_epochs = 100
+gradient_accumulation_steps = 1
 max_grad_norm = 1.0
 cam_drop_prob = 0.1
-depth_drop_prob = 0.3
+depth_drop_prob = 0.0
+always_use_depth_gt = True
 save_each_epoch = False
 
-
-# == Dataset Configuration ==
-train_batch_images = 24
-num_workers = 8
 
 # == Optimizer Configuration ==
 optimizer_type = "adamw"
 adam_beta1 = 0.9
 adam_beta2 = 0.95
 adam_epsilon = 1e-8
-adam_weight_decay = 0.01
+adam_weight_decay = 0.05
 
 # == Learning Rate Configuration ==
-lr = 2e-5
-lr_patch_embed = 1e-5
-lr_camera_head = 2e-5
-lr_depth_head = 2e-5
-lr_point_head = 2e-5
+lr = 1e-4
+lr_patch_embed = 1e-4
+lr_camera_head = 1e-4
+lr_depth_head = 1e-4
+lr_point_head = 1e-4
+lr_object_srt_head = 1e-4
+lr_object_cross_attn = 1e-4
+lr_object_prototype_poolers = 1e-4
 
 # == Learning Rate Scheduler Configuration ==
 lr_scheduler_type = "cosine_with_warmup"
-warmup_steps = 8000
-eta_min_factor = 0.1  # Minimum learning rate factor for cosine decay
+warmup_steps = 250
+eta_min_factor = 1e-4  # Minimum learning rate factor for cosine decay
 
 # == Loss Configuration ==
 # Camera loss
@@ -72,6 +96,13 @@ point_loss_weight = 1.0
 point_gradient_loss_fn = "normal"
 point_valid_range = 0.98
 
+# Object 6D pose loss
+object_srt_loss_weight = 1.0
+object_srt_loss_type = "l1"
+object_srt_weight_pose = 1.0
+object_srt_weight_translation = 1.0
+object_srt_init_w = 1.0
+
 # == Visualization Configuration ==
 save_glb_visualization = False
 vis_conf_threshold = 0.2
@@ -86,42 +117,26 @@ vis_prediction_mode = "Predicted Depth"
 resume_model_path = None
 
 # == Dataset Configuration ==
-resolution = [(518, 518), (518, 490), (518, 462), 
-              (518, 434), (518, 406), (518, 378), 
-              (518, 350), (518, 336), (518, 322), 
-              (518, 294), (518, 266), (518, 252), 
-              (518, 238), (518, 210), (518, 182), 
-              (518, 168)]
+train_batch_images = 20
+num_workers = 4
+resolution = (518, 518)
 
-train_dataset = f"22_400 @ ARKitScenesHigh(use_cache = True, quick = False, top_k = 64, dset='Training', z_far = 50, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-                + 3_600  @ Bedlam(use_cache = True, quick = False, top_k = 64, dset='', z_far = 200, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-                + 24_800 @ Co3d(use_cache = True, quick = False, top_k = 64, dset='', z_far = 50, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               +  9_000 @ Dl3dv(use_cache = True, quick = False, top_k = 64, dset='1K', z_far = 500, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               + 10_000 @ Dl3dv(use_cache = True, quick = False, top_k = 64, dset='2K', z_far = 500, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               +  9_000 @ Dl3dv(use_cache = True, quick = False, top_k = 64, dset='3K', z_far = 500, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               +  6_000 @ Dl3dv(use_cache = True, quick = False, top_k = 64, dset='4K', z_far = 500, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               + 10_000 @ Dl3dv(use_cache = True, quick = False, top_k = 64, dset='5K', z_far = 500, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               + 10_000 @ Dl3dv(use_cache = True, quick = False, top_k = 64, dset='6K', z_far = 500, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               + 10_000 @ Dl3dv(use_cache = True, quick = False, top_k = 64, dset='7K', z_far = 500, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               + 11_200 @ Hypersim(use_cache = True, quick = False, top_k = 64, dset='', z_far = 200, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               + 10_000 @ Kubric(use_cache = True, quick = False, top_k = 128, dset='trackings', z_far = 1000, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               + 84_000 @ MapFree(use_cache = True, quick = False, top_k = 256, dset='', z_far = 400, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               + 22_400 @ MegaDepth(use_cache = True, quick = False, top_k = 64, dset='', z_far = 1000, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               + 28_800 @ Mp3d(use_cache = True, quick = False, top_k = 32, dset='', z_far = 100, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               +  1_400 @ Mvs_Synth(use_cache = True, quick = False, top_k = 64, dset='', z_far = 1000, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               + 38_400 @ Scannet(use_cache = True, quick = False, top_k = 64, dset='scans', z_far = 100, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               + 16_000 @ ScannetppV2(use_cache = True, quick = False, top_k = 64, dset='', z_far = 100, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               +  9_400 @ Spring(use_cache = True, quick = False, top_k = 128, dset='', z_far = 1000, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               +  7_200 @ PointOdysseyDUSt3R(use_cache = True, quick = False, top_k = 128, dset='train', z_far = 1000, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               + 14_400 @ Uasol(use_cache = True, quick = False, top_k = 64, dset='', z_far = 100, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               + 20_000 @ Waymo(use_cache = True, quick = False, top_k = 64, dset='', z_far = 655, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               +    168 @ Unreal4k(use_cache = True, quick = False, top_k =64, dset='', z_far = 1000, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               + 56_000 @ TarTanAirDUSt3R(use_cache = True, quick = False, top_k =64, dset='', z_far = 1000, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               +  5_600 @ Vkitti(use_cache = True, quick = False, top_k = 64, dset='', z_far = 655, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               + 36_000 @ Dynamic_Replica(use_cache = True, quick = False, top_k =36, dset='train', z_far = 100, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985) \
-               + 26_000 @ Wildrgb(use_cache = True, quick = False, top_k = 128, dset='', z_far = 50, aug_crop=16, resolution={resolution}, transform=ColorJitter, seed=985)"
+train_dataset = (
+    "5000 @ SixDPose("
+    "dataset_location='/mnt/train-data-4-hdd/yian/6dpose_obj/0406_fixedCam_diffpose_1k', "
+    "OBJECT_INPUT_ROOT='/mnt/train-data-4-hdd/yian/6dpose_obj/0406_fixedCam_diffpose_1k/object_space_rgb', "
+    "dset='train', "
+    "selected_views=(1,), "
+    "object_input_views=(1, 3, 4), "
+    "only_run_start='run_0000', "
+    "only_run_end='run_0999', "
+    "verify_files=True, "
+    "z_far=20, "
+    "resolution=(518, 518), "
+    "transform=ColorJitter, "
+    "seed=42)"
+)
 
                     
                     
               
-

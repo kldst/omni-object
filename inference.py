@@ -13,12 +13,14 @@ import os
 import argparse
 import threading
 import time
+from pathlib import Path
 from typing import List, Optional
 
 import numpy as np
 import torch
 import viser
 import viser.transforms as viser_tf
+from huggingface_hub import hf_hub_download
 from safetensors.torch import load_file
 from tqdm import tqdm
 
@@ -32,6 +34,26 @@ from visual_util import (
     load_images_and_cameras,
     predictions_to_glb,
 )
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+CHECKPOINT_DIR = PROJECT_ROOT / "checkpoints"
+CHECKPOINT_NAME = "OmniVGGT.safetensors"
+MODEL_REPO_ID = "Livioni/OmniVGGT"
+
+
+def ensure_checkpoint() -> Path:
+    checkpoint_path = CHECKPOINT_DIR / CHECKPOINT_NAME
+    if checkpoint_path.exists():
+        return checkpoint_path
+
+    CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"Checkpoint not found at {checkpoint_path}. Downloading from {MODEL_REPO_ID}...")
+    downloaded_path = hf_hub_download(
+        repo_id=MODEL_REPO_ID,
+        filename=CHECKPOINT_NAME,
+        local_dir=CHECKPOINT_DIR,
+    )
+    return Path(downloaded_path)
 
 def viser_wrapper(
     pred_dict: dict,
@@ -319,8 +341,8 @@ def main():
     # Initialize and load OmniVGGT model
     print("Initializing and loading OmniVGGT model...")
     model = OmniVGGT()
-    # Load weights from local checkpoints
-    state_dict = load_file("checkpoints/OmniVGGT.safetensors")
+    checkpoint_path = ensure_checkpoint()
+    state_dict = load_file(str(checkpoint_path))
     model.load_state_dict(state_dict, strict=True)
     model.to(device).eval()
 

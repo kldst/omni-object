@@ -101,16 +101,35 @@ class ResizedDataset (EasyDataset):
 
         assert len(self._idxs_mapping) == self.new_size
 
+    def make_sampler(self, batch_size, shuffle=True,
+                     world_size=1, rank=0, drop_last=True):
+        num_of_aspect_ratios = len(self._resolutions)
+        return BatchedRandomSampler(
+            self,
+            batch_size=batch_size,
+            pool_size=num_of_aspect_ratios,
+            world_size=world_size,
+            rank=rank,
+            drop_last=drop_last,
+        )
+
     def __getitem__(self, idx):
         assert hasattr(self, '_idxs_mapping'), 'You need to call dataset.set_epoch() to use ResizedDataset.__getitem__()'
         if isinstance(idx, tuple):
+            if len(idx) == 2:
+                sample_index, other = idx
+                return self.dataset[(self._idxs_mapping[sample_index], other)]
+
             *seq_sample_index, other, batch_size = idx
+            if len(seq_sample_index) == 0:
+                raise ValueError(f"Invalid tuple index for ResizedDataset: {idx}")
+
             data_samples = []
             seq_num = batch_size // len(seq_sample_index)
             for sample_index in seq_sample_index:
                 new_idx = (self._idxs_mapping[sample_index], other, seq_num)
                 data_samples.append(self.dataset[new_idx])
-            
+
             return data_samples
         else:
             return self.dataset[self._idxs_mapping[idx]]

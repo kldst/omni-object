@@ -1,3 +1,5 @@
+from importlib import import_module
+
 from .arkitscenes_high import ARKitScenesHigh
 from .bedlam import Bedlam
 from .blendedmvs import BlendedMVS
@@ -19,6 +21,8 @@ from .unreal4k import Unreal4k
 from .vkitti import Vkitti
 from .waymo import Waymo
 from .wildrgb import Wildrgb
+
+SixDPose = import_module("omnivggt.datasets.6Dpose.6dpose").SixDPose
 
 from omnivggt.datasets.utils.transforms import ImgNorm, ColorJitter
 
@@ -49,7 +53,7 @@ def get_data_loader(dataset, batch_size, num_workers=8,
     data_loader = torch.utils.data.DataLoader(
         dataset,
         sampler=sampler,
-        batch_size=1, #Do not modify this
+        batch_size=batch_size,
         num_workers=num_workers,
         pin_memory=pin_mem,
         persistent_workers=False,
