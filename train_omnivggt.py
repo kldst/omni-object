@@ -50,6 +50,65 @@ def _unwrap_dataset(dataset):
     return current, wrappers
 
 
+def _to_python_list(value):
+    if isinstance(value, torch.Tensor):
+        return value.detach().cpu().tolist()
+    if isinstance(value, tuple):
+        return list(value)
+    return value
+
+
+def _print_debug_object_paths(logger_obj, dataset, batch, epoch, step, max_samples=2):
+    if dataset is None:
+        logger_obj.warning("debug_print_object_paths is enabled, but base dataset is unavailable.")
+        return
+
+    required_methods = (
+        "_resolve_scene_image_path",
+        "_resolve_depth_path",
+        "_resolve_camera_path",
+        "_resolve_object_image_path",
+    )
+    if not all(hasattr(dataset, name) for name in required_methods):
+        logger_obj.warning(
+            "debug_print_object_paths is enabled, but dataset %s does not expose path resolvers.",
+            type(dataset).__name__,
+        )
+        return
+
+    run_names = [str(x) for x in _to_python_list(batch.get("run_name", []))]
+    object_names = [str(x) for x in _to_python_list(batch.get("object_name", []))]
+    camera_indices = _to_python_list(batch.get("camera_indices", [])) or []
+    object_cam_indices = _to_python_list(batch.get("object_cam_indices", [])) or []
+
+    sample_count = min(max_samples, len(run_names), len(object_names))
+    logger_obj.info(
+        "[debug_object_paths] epoch=%s step=%s printing %s sample(s)",
+        epoch + 1,
+        step,
+        sample_count,
+    )
+
+    for sample_idx in range(sample_count):
+        run_name = run_names[sample_idx]
+        object_name = object_names[sample_idx]
+        scene_views = _to_python_list(camera_indices[sample_idx]) if sample_idx < len(camera_indices) else []
+        object_views = _to_python_list(object_cam_indices[sample_idx]) if sample_idx < len(object_cam_indices) else []
+
+        logger_obj.info(
+            "[debug_object_paths][sample %s] run=%s object=%s",
+            sample_idx,
+            run_name,
+            object_name,
+        )
+        for cam_idx in scene_views:
+            logger_obj.info("  scene_rgb: %s", dataset._resolve_scene_image_path(run_name, int(cam_idx)))
+            logger_obj.info("  scene_depth: %s", dataset._resolve_depth_path(run_name, int(cam_idx)))
+            logger_obj.info("  scene_camera: %s", dataset._resolve_camera_path(run_name, int(cam_idx)))
+        for cam_idx in object_views:
+            logger_obj.info("  object_rgb: %s", dataset._resolve_object_image_path(object_name, int(cam_idx)))
+
+
 if __name__ == '__main__':
     # ======================================================
     # 1. Configuration and Initialization
@@ -248,6 +307,9 @@ if __name__ == '__main__':
     # ======================================================
     global_step = initial_step
     accumulation_steps = cfg.get("gradient_accumulation_steps", 2)
+    debug_print_object_paths = bool(cfg.get("debug_print_object_paths", False))
+    debug_print_object_paths_steps = int(cfg.get("debug_print_object_paths_steps", 1))
+    debug_print_object_paths_max_samples = int(cfg.get("debug_print_object_paths_max_samples", 2))
     
     for epoch in range(initial_epoch, cfg.get('num_train_epochs')):
         logger.info("=" * 60)
@@ -283,25 +345,38 @@ if __name__ == '__main__':
         for step, batch in enumerate(train_iter, start=step_in_epoch):
             if isinstance(batch, list):
                 batch = merge_dicts(batch)
-            
-            # Normalize camera extrinsics and points for loss computation
-            new_extrinsics, _, new_world_points, new_depths = normalize_camera_extrinsics_and_points_batch(
-                extrinsics=batch['extrinsic'],
-                cam_points=None,
-                world_points=batch['world_points'],
-                depths=batch['depth'],
-                point_masks=batch['valid_mask'],
-            )
+
+            if (
+                debug_print_object_paths
+                and accelerator.is_main_process
+                and step < debug_print_object_paths_steps
+            ):
+                _print_debug_object_paths(
+                    logger,
+                    base_dataset,
+                    batch,
+                    epoch,
+                    step,
+                    max_samples=debug_print_object_paths_max_samples,
+                )
             
             # Store original inputs for model
             input_extrinsics = batch['extrinsic'].clone()
             input_depths = batch['depth'].clone()
             input_mask = batch['valid_mask'].clone()
-            
-            # Update batch with normalized values for loss computation
-            batch['extrinsic'] = new_extrinsics
-            batch['world_points'] = new_world_points
-            batch['depth'] = new_depths
+
+            # Only normalize supervision targets when dense world-point GT is available.
+            if 'world_points' in batch:
+                new_extrinsics, _, new_world_points, new_depths = normalize_camera_extrinsics_and_points_batch(
+                    extrinsics=batch['extrinsic'],
+                    cam_points=None,
+                    world_points=batch['world_points'],
+                    depths=batch['depth'],
+                    point_masks=batch['valid_mask'],
+                )
+                batch['extrinsic'] = new_extrinsics
+                batch['world_points'] = new_world_points
+                batch['depth'] = new_depths
             
             # Forward pass
             inputs = {

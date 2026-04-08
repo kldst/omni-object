@@ -85,21 +85,18 @@ class ObjectPoseTransformerDecoderHead(nn.Module):
         nn.init.xavier_uniform_(self.decpose.weight, gain=0.01)
         nn.init.xavier_uniform_(self.dectranslate.weight, gain=0.01)
 
-    def forward(self, context_tokens: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, context_tokens: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         batch_size = context_tokens.shape[0]
         pred_pose = self.init_pose.expand(batch_size, -1)
         pred_translate = self.init_translate.expand(batch_size, -1)
-        pred_pose_0 = pred_pose
 
-        for iter_idx in range(int(self.cfg.ief_iters)):
+        for _ in range(int(self.cfg.ief_iters)):
             token = torch.zeros((batch_size, 1, 1), device=context_tokens.device, dtype=context_tokens.dtype)
             token_out = self.transformer(token, context=context_tokens).squeeze(1)
             pred_pose = self.decpose(token_out) + pred_pose
             pred_translate = self.dectranslate(token_out) + pred_translate
-            if iter_idx == 0:
-                pred_pose_0 = pred_pose
 
-        return pred_pose, pred_translate, pred_pose_0
+        return pred_pose, pred_translate
 
 
 class ObjectPoseHead(nn.Module):
@@ -133,11 +130,10 @@ class ObjectPoseHead(nn.Module):
             scene_global = patch_tokens.mean(dim=(1, 2))
             object_global = object_tokens.mean(dim=(1, 2))
             context_tokens = torch.cat([scene_global, object_global], dim=-1).unsqueeze(1)
-            object_pose, object_translation, pred_pose_0 = self.decoder(context_tokens)
+            object_pose, object_translation = self.decoder(context_tokens)
             return {
                 "object_pose": object_pose,
                 "object_translation": object_translation,
-                "pred_pose_0": pred_pose_0,
             }
 
         if self.context_pool == "mean":
@@ -154,11 +150,10 @@ class ObjectPoseHead(nn.Module):
                 raise ValueError(f"object_latent should be (B,S,C), got {tuple(object_latent.shape)}")
             context_tokens = torch.cat([object_latent, context_tokens], dim=1)
 
-        object_pose, object_translation, pred_pose_0 = self.decoder(context_tokens)
+        object_pose, object_translation = self.decoder(context_tokens)
         return {
             "object_pose": object_pose,
             "object_translation": object_translation,
-            "pred_pose_0": pred_pose_0,
         }
 
 

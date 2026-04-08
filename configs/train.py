@@ -6,7 +6,7 @@
 
 # == Common Configuration ==
 output_dir = "outputs"
-exp_name = "0405_omnivggt_single_image_pose_5sameobject"
+exp_name = "0405_omnivggt_single_image_pose_5sameobject_TEST"
 logging_dir = "logs"
 
 # == Logging Configuration ==
@@ -14,16 +14,16 @@ wandb = True
 tensorboard = False
 report_to = "tensorboard"
 num_save_log = 1
-num_save_visual = 5000
+num_save_visual = 10000
 checkpointing_steps = 2000
 
 # == Model Configuration ==
-model_url = "/mnt/train-data-4-hdd/yian/6dpose_obj/OmniVGGT-official/checkpoints/OmniVGGT.safetensors"
+model_url = "/mnt/train-data-4-hdd/yian/freepose/omni-object/omnivggt_pretrain_model/OmniVGGT.safetensors"
 model_load_strict = False
 model_requires_grad = False
 patch_embed_freeze = True
 enable_point = False
-enable_depth = True
+enable_depth = False
 enable_camera = False
 enable_object_srt = True
 object_srt_head_freeze = False
@@ -53,6 +53,9 @@ seed = 42
 num_train_epochs = 100
 gradient_accumulation_steps = 1
 max_grad_norm = 1.0
+debug_print_object_paths = False
+debug_print_object_paths_steps = 1
+debug_print_object_paths_max_samples = 1
 cam_drop_prob = 0.1
 depth_drop_prob = 0.0
 always_use_depth_gt = True
@@ -78,7 +81,7 @@ lr_object_prototype_poolers = 1e-4
 
 # == Learning Rate Scheduler Configuration ==
 lr_scheduler_type = "cosine_with_warmup"
-warmup_steps = 250
+warmup_steps = 0
 eta_min_factor = 1e-4  # Minimum learning rate factor for cosine decay
 
 # == Loss Configuration ==
@@ -101,7 +104,6 @@ object_srt_loss_weight = 1.0
 object_srt_loss_type = "l1"
 object_srt_weight_pose = 1.0
 object_srt_weight_translation = 1.0
-object_srt_init_w = 1.0
 
 # == Visualization Configuration ==
 save_glb_visualization = False
@@ -117,19 +119,20 @@ vis_prediction_mode = "Predicted Depth"
 resume_model_path = None
 
 # == Dataset Configuration ==
-train_batch_images = 20
+train_batch_images = 2
 num_workers = 4
 resolution = (518, 518)
 
 train_dataset = (
-    "5000 @ SixDPose("
-    "dataset_location='/mnt/train-data-4-hdd/yian/6dpose_obj/0406_fixedCam_diffpose_1k', "
-    "OBJECT_INPUT_ROOT='/mnt/train-data-4-hdd/yian/6dpose_obj/0406_fixedCam_diffpose_1k/object_space_rgb', "
+    "69674 @ SixDPose("
+    "dataset_location='/mnt/train-data-4-hdd/yian/freepose/0407_fixedCam_diffpose_15k_google', "
+    "OBJECT_INPUT_ROOT='/mnt/train-data-4-hdd/yian/freepose/object_space_renders_all', "
     "dset='train', "
-    "selected_views=(1,), "
-    "object_input_views=(1, 3, 4), "
+    "selected_views=tuple(range(1, 21)), "
+    "scene_num_views=1, "
+    "object_input_views=(1, 5, 10, 15), "
     "only_run_start='run_0000', "
-    "only_run_end='run_0999', "
+    "only_run_end='run_14000', "
     "verify_files=True, "
     "z_far=20, "
     "resolution=(518, 518), "

@@ -152,7 +152,6 @@ def main():
         "extrinsic",
         "intrinsic",
         "depth",
-        "world_points",
         "valid_mask",
         "object_images",
         "object_rotation",

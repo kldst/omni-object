@@ -153,3 +153,5 @@ skyseg.onnx
 # pixi environments
 .pixi
 *.egg-info
+
+omnivggt_pretrain_model/

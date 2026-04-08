@@ -467,7 +467,6 @@ def build_loss_criterion(cfg: Any) -> MultitaskLoss:
             "loss_type": cfg.get("object_srt_loss_type", "l1"),
             "weight_pose": cfg.get("object_srt_weight_pose", 1.0),
             "weight_translation": cfg.get("object_srt_weight_translation", 1.0),
-            "init_w": cfg.get("object_srt_init_w", 1.0),
         } if cfg.get("enable_object_srt", False) else None,
     )
     

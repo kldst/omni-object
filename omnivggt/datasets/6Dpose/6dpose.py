@@ -22,12 +22,12 @@ from omnivggt.datasets.base.base_stereo_view_dataset import (
 )
 from omnivggt.datasets.base.batched_sampler import BatchedRandomSampler
 from omnivggt.datasets.utils.misc import threshold_depth_map
-from omnivggt.utils.geometry import closed_form_inverse_se3, depth_to_world_coords_points
+from omnivggt.utils.geometry import closed_form_inverse_se3, depthmap_to_absolute_camera_coordinates
 
 
 class SixDPose(BaseStereoViewDataset):
-    DEFAULT_OBJECT_VIEWS = (1, 3, 4)
-    DEFAULT_SCENE_VIEWS = (1,)
+    DEFAULT_OBJECT_VIEWS = (1, 5, 10, 15)
+    DEFAULT_SCENE_VIEWS = tuple(range(1, 21))
     _SCENE_PATTERN = re.compile(r"^Main_Camera_\((\d+)\)\.jpg$")
     _OBJECT_PATTERN = re.compile(r"^Main_Camera_\((\d+)\)_rgb\.png$")
 
@@ -38,6 +38,7 @@ class SixDPose(BaseStereoViewDataset):
         OBJECT_INPUT_ROOT: Optional[str] = None,
         OBJECT_IMAGE_ROOT: Optional[str] = None,
         selected_views: Optional[Sequence[int]] = None,
+        scene_num_views: int = 1,
         object_input_views: Optional[Sequence[int]] = None,
         depth_scale: float = 1000.0,
         use_opencv_camera: bool = True,
@@ -67,7 +68,9 @@ class SixDPose(BaseStereoViewDataset):
         self.verify_files = bool(verify_files)
         self.quick = bool(quick)
         self.scene_view_pool = tuple(int(v) for v in (selected_views or self.DEFAULT_SCENE_VIEWS))
+        self.scene_num_views = int(scene_num_views)
         self.object_view_pool = tuple(int(v) for v in (object_input_views or self.DEFAULT_OBJECT_VIEWS))
+        self.object_dir_lookup = self._build_object_dir_lookup(self.object_root)
 
         self.only_run_name = (only_run_name or "").strip()
         self.only_run_names = [x.strip() for x in (only_run_names or []) if str(x).strip()]
@@ -101,6 +104,45 @@ class SixDPose(BaseStereoViewDataset):
             "Unable to locate object image root. "
             "Please provide OBJECT_INPUT_ROOT/OBJECT_IMAGE_ROOT explicitly."
         )
+
+    @staticmethod
+    def _normalize_object_key(name: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "", str(name).lower())
+
+    @classmethod
+    def _candidate_object_dir_names(cls, object_name: str) -> List[str]:
+        object_name = str(object_name)
+        candidates = [object_name]
+        if object_name.startswith("freepose_obj_"):
+            remainder = object_name[len("freepose_obj_") :]
+            candidates.append(remainder.replace("_obj_", "__obj_"))
+        if object_name.startswith("google_") and object_name.endswith("_meshes_model"):
+            core = object_name[len("google_") : -len("_meshes_model")]
+            candidates.append(f"google__{core}__meshes")
+        return list(dict.fromkeys(candidates))
+
+    @classmethod
+    def _build_object_dir_lookup(cls, object_root: str) -> Dict[str, str]:
+        lookup = {}
+        for entry in os.listdir(object_root):
+            entry_path = osp.join(object_root, entry)
+            if not osp.isdir(entry_path):
+                continue
+            lookup.setdefault(cls._normalize_object_key(entry), entry)
+        return lookup
+
+    def _resolve_object_dir_name(self, object_name: str) -> Optional[str]:
+        for candidate in self._candidate_object_dir_names(object_name):
+            candidate_path = osp.join(self.object_root, candidate)
+            if osp.isdir(candidate_path):
+                return candidate
+
+        for candidate in self._candidate_object_dir_names(object_name):
+            normalized = self._normalize_object_key(candidate)
+            matched = self.object_dir_lookup.get(normalized)
+            if matched:
+                return matched
+        return None
 
     @staticmethod
     def _parse_run_index(run_name: Optional[str]) -> Optional[int]:
@@ -186,7 +228,10 @@ class SixDPose(BaseStereoViewDataset):
         return osp.join(self.cam_root, run_name, f"camera_Main_Camera_({cam_idx}).npz")
 
     def _resolve_object_image_path(self, object_name: str, cam_idx: int) -> str:
-        return osp.join(self.object_root, object_name, f"Main_Camera_({cam_idx})_rgb.png")
+        object_dir = self._resolve_object_dir_name(object_name)
+        if object_dir is None:
+            return osp.join(self.object_root, object_name, f"Main_Camera_({cam_idx})_rgb.png")
+        return osp.join(self.object_root, object_dir, f"Main_Camera_({cam_idx})_rgb.png")
 
     def _list_available_scene_views(self, run_name: str) -> List[int]:
         run_dir = osp.join(self.scene_root, run_name)
@@ -209,7 +254,9 @@ class SixDPose(BaseStereoViewDataset):
         return sorted(set(available_views))
 
     def _verify_object_views(self, object_name: str) -> bool:
-        return all(osp.isfile(self._resolve_object_image_path(object_name, cam_idx)) for cam_idx in self.object_view_pool)
+        return self._resolve_object_dir_name(object_name) is not None and all(
+            osp.isfile(self._resolve_object_image_path(object_name, cam_idx)) for cam_idx in self.object_view_pool
+        )
 
     def _build_records(self) -> List[Dict]:
         records = []
@@ -224,7 +271,8 @@ class SixDPose(BaseStereoViewDataset):
 
             pose_lookup = self._load_pose_lookup(pose_path)
             for object_name, pose in pose_lookup.items():
-                if not osp.isdir(osp.join(self.object_root, object_name)):
+                object_dir_name = self._resolve_object_dir_name(object_name)
+                if object_dir_name is None:
                     continue
                 if self.verify_files and not self._verify_object_views(object_name):
                     continue
@@ -232,6 +280,7 @@ class SixDPose(BaseStereoViewDataset):
                     {
                         "run_name": run_name,
                         "object_name": object_name,
+                        "object_dir_name": object_dir_name,
                         "available_scene_views": available_scene_views,
                         "object_cam_indices": list(self.object_view_pool),
                         "pose": pose,
@@ -330,11 +379,11 @@ class SixDPose(BaseStereoViewDataset):
     def __getitem__(self, idx):
         if isinstance(idx, tuple):
             idx, ar_idx, *num_args = idx
-            num_views = num_args[0] if num_args else len(self.scene_view_pool)
+            num_views = num_args[0] if num_args else self.scene_num_views
         else:
             assert len(self._resolutions) == 1
             ar_idx = 0
-            num_views = len(self.scene_view_pool)
+            num_views = self.scene_num_views
 
         if self.seed:
             self._rng = np.random.default_rng(seed=self.seed + idx)
@@ -379,12 +428,13 @@ class SixDPose(BaseStereoViewDataset):
                 res, err_msg = is_good_type(key, value)
                 assert res, f"{err_msg} with {key}={value} for view {view_name(view)}"
 
-            view["camera_pose"] = closed_form_inverse_se3(view["camera_pose"][None])[0]
-            world_points, cam_points, point_mask = depth_to_world_coords_points(
-                view["depthmap"], view["camera_pose"], view["camera_intrinsics"], z_far=self.z_far
+            _, point_mask = depthmap_to_absolute_camera_coordinates(
+                view["depthmap"],
+                view["camera_intrinsics"],
+                view["camera_pose"],
+                z_far=self.z_far,
             )
-            view["world_coords_points"] = world_points
-            view["cam_coords_points"] = cam_points
+            view["camera_pose"] = closed_form_inverse_se3(view["camera_pose"][None])[0]
             view["point_mask"] = point_mask
 
         for view in views:
@@ -396,7 +446,6 @@ class SixDPose(BaseStereoViewDataset):
             "depthmap": ("depth", lambda x: np.stack([d[:, :, np.newaxis] for d in x])),
             "camera_pose": ("extrinsic", lambda x: np.stack([p[:3] for p in x])),
             "camera_intrinsics": ("intrinsic", np.stack),
-            "world_coords_points": ("world_points", np.stack),
             "true_shape": ("true_shape", np.array),
             "point_mask": ("valid_mask", np.stack),
             "label": ("label", lambda x: x),

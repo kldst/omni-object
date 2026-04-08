@@ -105,13 +105,11 @@ def compute_object_srt_loss(
     loss_type="l1",
     weight_pose=1.0,
     weight_translation=1.0,
-    init_w=1.0,
     debug_force_model_output_to_ground_truth=False,
     **kwargs,
 ):
     pred_pose = predictions["object_pose"]
     pred_translation = predictions["object_translation"]
-    pred_pose_0 = predictions.get("pred_pose_0", None)
 
     gt_rot = batch["object_rotation"]
     gt_pose = _rotation_matrix_to_rot6d(gt_rot)
@@ -137,34 +135,21 @@ def compute_object_srt_loss(
                 "loss_object_srt": dummy,
                 "loss_object_pose": dummy,
                 "loss_object_translation": dummy,
-                "loss_object_pose_init": dummy,
             }
         pred_pose = pred_pose[valid_mask]
         pred_translation = pred_translation[valid_mask]
         gt_pose = gt_pose[valid_mask]
         gt_translation = gt_translation[valid_mask]
-        if pred_pose_0 is not None:
-            pred_pose_0 = pred_pose_0[valid_mask]
 
     loss_pose = _vector_loss(pred_pose, gt_pose, loss_type=loss_type)
     loss_translation = _vector_loss(pred_translation, gt_translation, loss_type=loss_type)
 
-    if pred_pose_0 is not None:
-        loss_pose_init = _vector_loss(pred_pose_0, gt_pose, loss_type=loss_type)
-    else:
-        loss_pose_init = (pred_pose * 0).mean()
-
-    total = (
-        weight_pose * loss_pose
-        + weight_translation * loss_translation
-        + float(init_w) * loss_pose_init
-    )
+    total = weight_pose * loss_pose + weight_translation * loss_translation
 
     return {
         "loss_object_srt": total,
         "loss_object_pose": loss_pose,
         "loss_object_translation": loss_translation,
-        "loss_object_pose_init": loss_pose_init,
     }
 
 

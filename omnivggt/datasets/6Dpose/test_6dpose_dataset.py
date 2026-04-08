@@ -117,7 +117,6 @@ def main():
             f"images={tuple(sample['images'].shape)}",
             f"object_images={tuple(sample['object_images'].shape)}",
             f"depth={tuple(sample['depth'].shape)}",
-            f"world_points={tuple(sample['world_points'].shape)}",
         )
         valid_mask = sample["valid_mask"]
         valid_ratio = float(valid_mask.mean())
