@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
+import os
 import torch
 import torch.nn as nn
 from typing import Tuple, List, Optional, Callable, Any
@@ -61,6 +62,8 @@ class Aggregator(nn.Module):
         proj_bias=True,
         ffn_bias=True,
         patch_embed="dinov2_vitl14_reg",
+        patch_embed_pretrained_path=None,
+        load_patch_embed_from_hub=True,
         aa_order=["frame", "global"],
         aa_block_size=1,
         qk_norm=True,
@@ -70,7 +73,15 @@ class Aggregator(nn.Module):
     ):
         super().__init__()
 
-        self.__build_patch_embed__(patch_embed, img_size, patch_size, num_register_tokens, embed_dim=embed_dim)
+        self.__build_patch_embed__(
+            patch_embed,
+            img_size,
+            patch_size,
+            num_register_tokens,
+            embed_dim=embed_dim,
+            patch_embed_pretrained_path=patch_embed_pretrained_path,
+            load_patch_embed_from_hub=load_patch_embed_from_hub,
+        )
 
         # Initialize rotary position embedding if frequency > 0
         self.rope = RotaryPositionEmbedding2D(frequency=rope_freq) if rope_freq > 0 else None
@@ -156,6 +167,8 @@ class Aggregator(nn.Module):
         block_chunks=0,
         init_values=1.0,
         embed_dim=1024,
+        patch_embed_pretrained_path=None,
+        load_patch_embed_from_hub=True,
     ):
         """
         Build the patch embed layer. If 'conv', we use a
@@ -186,18 +199,31 @@ class Aggregator(nn.Module):
             # if hasattr(self.patch_embed, "mask_token"):
             #     self.patch_embed.mask_token.requires_grad_(False)
             
-            if patch_embed == "dinov2_vitl14_reg":
-                dinov2_pretrained = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitl14_reg')
-                self.patch_embed.load_state_dict(dinov2_pretrained.state_dict(), strict=False)
-            elif patch_embed == "dinov2_vitb14_reg":
-                dinov2_pretrained = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14_reg')
-                self.patch_embed.load_state_dict(dinov2_pretrained.state_dict(), strict=True)
-            elif patch_embed == "dinov2_vits14_reg":
-                dinov2_pretrained = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14_reg')
-                self.patch_embed.load_state_dict(dinov2_pretrained.state_dict(), strict=True)
-            elif patch_embed == "dinov2_vitg2_reg":
-                dinov2_pretrained = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitg2_reg')
-                self.patch_embed.load_state_dict(dinov2_pretrained.state_dict(), strict=True)
+            if patch_embed_pretrained_path:
+                if not os.path.isfile(patch_embed_pretrained_path):
+                    raise FileNotFoundError(
+                        f"patch_embed_pretrained_path does not exist: {patch_embed_pretrained_path}"
+                    )
+                logger.info("Loading patch embed weights from local file: %s", patch_embed_pretrained_path)
+                state_dict = torch.load(patch_embed_pretrained_path, map_location="cpu")
+                if isinstance(state_dict, dict) and "state_dict" in state_dict:
+                    state_dict = state_dict["state_dict"]
+                self.patch_embed.load_state_dict(state_dict, strict=False)
+            elif load_patch_embed_from_hub:
+                if patch_embed == "dinov2_vitl14_reg":
+                    dinov2_pretrained = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitl14_reg')
+                    self.patch_embed.load_state_dict(dinov2_pretrained.state_dict(), strict=False)
+                elif patch_embed == "dinov2_vitb14_reg":
+                    dinov2_pretrained = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14_reg')
+                    self.patch_embed.load_state_dict(dinov2_pretrained.state_dict(), strict=True)
+                elif patch_embed == "dinov2_vits14_reg":
+                    dinov2_pretrained = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14_reg')
+                    self.patch_embed.load_state_dict(dinov2_pretrained.state_dict(), strict=True)
+                elif patch_embed == "dinov2_vitg2_reg":
+                    dinov2_pretrained = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitg2_reg')
+                    self.patch_embed.load_state_dict(dinov2_pretrained.state_dict(), strict=True)
+            else:
+                logger.info("Skipping torch.hub patch embed preload for %s", patch_embed)
                 
 
     def forward(

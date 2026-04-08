@@ -234,6 +234,8 @@ def load_model(cfg: Any, device: torch.device) -> Tuple[OmniVGGT, torch.dtype]:
         cam_drop_prob=cfg.get("cam_drop_prob", 0.1),
         depth_drop_prob=cfg.get("depth_drop_prob", 0.1),
         always_use_depth_gt=cfg.get("always_use_depth_gt", False),
+        patch_embed_pretrained_path=cfg.get("patch_embed_pretrained_path", None),
+        load_patch_embed_from_hub=cfg.get("load_patch_embed_from_hub", True),
         object_pose_context_pool=cfg.get("object_pose_context_pool", "flatten"),
         object_pose_use_global_scene_object_concat=cfg.get("object_pose_use_global_scene_object_concat", False),
         object_pose_transformer_depth=cfg.get("object_pose_transformer_depth", 6),

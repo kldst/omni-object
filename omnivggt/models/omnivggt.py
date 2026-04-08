@@ -75,6 +75,8 @@ class ObjectPrototypePool(nn.Module):
 class OmniVGGT(nn.Module, PyTorchModelHubMixin):
     def __init__(self, img_size=518, patch_size=14, embed_dim=1024, cam_drop_prob=0.1, depth_drop_prob=0.1,
                  always_use_depth_gt=False,
+                 patch_embed_pretrained_path=None,
+                 load_patch_embed_from_hub=True,
                  enable_camera=True, enable_depth=True, enable_point=True,
                  enable_object_srt=False,
                  object_pose_context_pool="flatten",
@@ -98,7 +100,9 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
 
         self.aggregator = ZeroAggregator(img_size=img_size, patch_size=patch_size, embed_dim=embed_dim, 
                                          pose_hidden_dim = 9, cam_drop_prob=cam_drop_prob, depth_drop_prob=depth_drop_prob,
-                                         always_use_depth_gt=always_use_depth_gt)
+                                         always_use_depth_gt=always_use_depth_gt,
+                                         patch_embed_pretrained_path=patch_embed_pretrained_path,
+                                         load_patch_embed_from_hub=load_patch_embed_from_hub)
         self.enable_multi_layer_object_prototype_cross_attn = bool(enable_multi_layer_object_prototype_cross_attn)
         self.object_prototype_layer_indices = tuple(int(idx) for idx in object_prototype_layer_indices)
         self.object_prototype_num_tokens = int(object_prototype_num_tokens)
