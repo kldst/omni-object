@@ -2,11 +2,11 @@
 # OmniVGGT Training Configuration
 # ======================================================
 
-# python train_omnivggt.py --config configs/train.py
+# accelerate launch --num_processes=2 train_omnivggt.py --config configs/train.py
 
 # == Common Configuration ==
 output_dir = "outputs"
-exp_name = "0405_omnivggt_single_image_pose_5sameobject_TEST"
+exp_name = "0419_omnivggt_trajectory"
 logging_dir = "logs"
 
 # == Logging Configuration ==
@@ -18,7 +18,7 @@ num_save_visual = 10000
 checkpointing_steps = 2000
 
 # == Model Configuration ==
-model_url = "/mnt/train-data-4-hdd/yian/freepose/omni-object/omnivggt_pretrain_model/OmniVGGT.safetensors"
+model_url = "/omni_vggt/omnivggt_pretrain_model/OmniVGGT.safetensors"
 model_load_strict = False
 model_requires_grad = False
 patch_embed_freeze = True
@@ -121,20 +121,19 @@ vis_prediction_mode = "Predicted Depth"
 resume_model_path = None
 
 # == Dataset Configuration ==
-train_batch_images = 2
-num_workers = 4
+train_batch_images = 80
+num_workers = 0
 resolution = (518, 518)
 
 train_dataset = (
-    "69674 @ SixDPose("
-    "dataset_location='/mnt/train-data-4-hdd/yian/freepose/0407_fixedCam_diffpose_15k_google', "
+    "SixDPose("
+    "dataset_location='/mnt/train-data-4-hdd/yian/freepose/0419_trajectory_test_4scene_500frame', "
     "OBJECT_INPUT_ROOT='/mnt/train-data-4-hdd/yian/freepose/object_space_renders_all', "
     "dset='train', "
-    "selected_views=tuple(range(1, 21)), "
     "scene_num_views=1, "
     "object_input_views=(1, 5, 10, 15), "
-    "only_run_start='run_0000', "
-    "only_run_end='run_14000', "
+    "only_scene_start='scene_0000', "
+    "only_scene_end='scene_0005', "
     "verify_files=True, "
     "z_far=20, "
     "resolution=(518, 518), "

@@ -265,7 +265,9 @@ def load_model(cfg: Any, device: torch.device) -> Tuple[OmniVGGT, torch.dtype]:
     logger.info(f"Loading pretrained weights from {model_url}")
     
     try:
+        load_source = "remote"
         if os.path.isfile(model_url):
+            load_source = "local"
             logger.info(f"Detected local checkpoint file: {model_url}")
             if model_url.endswith(".safetensors"):
                 state_dict = load_safetensors_file(model_url, device="cpu")
@@ -273,8 +275,29 @@ def load_model(cfg: Any, device: torch.device) -> Tuple[OmniVGGT, torch.dtype]:
                 state_dict = torch.load(model_url, map_location="cpu")
         else:
             state_dict = torch.hub.load_state_dict_from_url(model_url, map_location="cpu")
-        model.load_state_dict(state_dict, strict=cfg.get("model_load_strict", False))
-        logger.info("Pretrained weights loaded successfully")
+        strict = cfg.get("model_load_strict", False)
+        incompatible_keys = model.load_state_dict(state_dict, strict=strict)
+        missing_keys = list(incompatible_keys.missing_keys)
+        unexpected_keys = list(incompatible_keys.unexpected_keys)
+
+        logger.info(
+            "Pretrained weights loaded successfully from %s checkpoint with strict=%s",
+            load_source,
+            strict,
+        )
+        logger.info(
+            "Checkpoint compatibility summary: missing_keys=%d, unexpected_keys=%d",
+            len(missing_keys),
+            len(unexpected_keys),
+        )
+        if missing_keys:
+            logger.warning("Missing keys (first 20): %s", missing_keys[:20])
+        if unexpected_keys:
+            logger.warning("Unexpected keys (first 20): %s", unexpected_keys[:20])
+        if not missing_keys and not unexpected_keys:
+            logger.info("Checkpoint fully matched the current model.")
+        else:
+            logger.warning("Checkpoint was only partially matched to the current model.")
     except Exception as e:
         logger.warning(f"Failed to load pretrained weights: {e}")
         logger.warning("Training from scratch...")
