@@ -127,8 +127,8 @@ resolution = (518, 518)
 
 train_dataset = (
     "SixDPose("
-    "dataset_location='/mnt/train-data-4-hdd/yian/freepose/0419_trajectory_test_4scene_500frame', "
-    "OBJECT_INPUT_ROOT='/mnt/train-data-4-hdd/yian/freepose/object_space_renders_all', "
+    "dataset_location='/dataset/0419_trajectory_test_4scene_500frame', "
+    "OBJECT_INPUT_ROOT='/dataset/object_space_renders_all', "
     "dset='train', "
     "scene_num_views=1, "
     "object_input_views=(1, 5, 10, 15), "
