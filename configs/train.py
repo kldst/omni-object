@@ -122,7 +122,7 @@ vis_prediction_mode = "Predicted Depth"
 resume_model_path = None
 
 # == Dataset Configuration ==
-train_batch_images = 60
+train_batch_images = 50
 num_workers = 0
 resolution = (518, 518)
 

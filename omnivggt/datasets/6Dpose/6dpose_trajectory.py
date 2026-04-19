@@ -22,7 +22,7 @@ from omnivggt.datasets.base.base_stereo_view_dataset import (
 )
 from omnivggt.datasets.base.batched_sampler import BatchedRandomSampler
 from omnivggt.datasets.utils.misc import threshold_depth_map
-from omnivggt.utils.geometry import closed_form_inverse_se3, depthmap_to_absolute_camera_coordinates
+from omnivggt.utils.geometry import closed_form_inverse_se3, depth_to_world_coords_points
 
 
 class SixDPose(BaseStereoViewDataset):
@@ -586,13 +586,15 @@ class SixDPose(BaseStereoViewDataset):
                 res, err_msg = is_good_type(key, value)
                 assert res, f"{err_msg} with {key}={value} for view {view_name(view)}"
 
-            _, point_mask = depthmap_to_absolute_camera_coordinates(
+            view["camera_pose"] = closed_form_inverse_se3(view["camera_pose"][None])[0]
+            world_points, cam_points, point_mask = depth_to_world_coords_points(
                 view["depthmap"],
-                view["camera_intrinsics"],
                 view["camera_pose"],
+                view["camera_intrinsics"],
                 z_far=self.z_far,
             )
-            view["camera_pose"] = closed_form_inverse_se3(view["camera_pose"][None])[0]
+            view["world_coords_points"] = world_points
+            view["cam_coords_points"] = cam_points
             view["point_mask"] = point_mask
 
         for view in views:
@@ -604,6 +606,7 @@ class SixDPose(BaseStereoViewDataset):
             "depthmap": ("depth", lambda x: np.stack([d[:, :, np.newaxis] for d in x])),
             "camera_pose": ("extrinsic", lambda x: np.stack([p[:3] for p in x])),
             "camera_intrinsics": ("intrinsic", np.stack),
+            "world_coords_points": ("world_points", np.stack),
             "true_shape": ("true_shape", np.array),
             "point_mask": ("valid_mask", np.stack),
             "label": ("label", lambda x: x),
