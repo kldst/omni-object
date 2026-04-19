@@ -27,7 +27,7 @@ class ObjectPoseHeadConfig:
 
 def _default_init_params_path() -> Optional[str]:
     repo_root = Path(__file__).resolve().parents[2]
-    candidate = repo_root / "training" / "data" / "init_6dpose" / "init_6dpose_params.npz"
+    candidate = repo_root / "init_6dpose" / "init_6dpose_params_identity_zero_translate.npz"
     return str(candidate) if candidate.is_file() else None
 
 

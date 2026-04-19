@@ -123,14 +123,32 @@ resume_model_path = None
 
 # == Dataset Configuration ==
 train_batch_images = 50
+val_batch_images = 50
+val_epoch_freq = 10
 num_workers = 0
 resolution = (518, 518)
 
 train_dataset = (
     "SixDPose("
-    "dataset_location='/dataset/0419_trajectory_test_4scene_500frame', "
+    "dataset_location='/dataset/0420_trajectory_40scene_500frame', "
     "OBJECT_INPUT_ROOT='/dataset/object_space_renders_all', "
     "dset='train', "
+    "scene_num_views=1, "
+    "object_input_views=(1, 5, 10, 15), "
+    "only_scene_start='scene_0000', "
+    "only_scene_end='scene_0079', "
+    "verify_files=True, "
+    "z_far=20, "
+    "resolution=(518, 518), "
+    "transform=ColorJitter, "
+    "seed=42)"
+)
+
+val_dataset = (
+    "SixDPose("
+    "dataset_location='/dataset/0419_trajectory_test_4scene_500frame', "
+    "OBJECT_INPUT_ROOT='/dataset/object_space_renders_all', "
+    "dset='val', "
     "scene_num_views=1, "
     "object_input_views=(1, 5, 10, 15), "
     "only_scene_start='scene_0000', "
@@ -138,7 +156,6 @@ train_dataset = (
     "verify_files=True, "
     "z_far=20, "
     "resolution=(518, 518), "
-    "transform=ColorJitter, "
     "seed=42)"
 )
 

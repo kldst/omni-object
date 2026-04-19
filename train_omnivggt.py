@@ -109,6 +109,109 @@ def _print_debug_object_paths(logger_obj, dataset, batch, epoch, step, max_sampl
             logger_obj.info("  object_rgb: %s", dataset._resolve_object_image_path(object_name, int(cam_idx)))
 
 
+def _prepare_batch_and_compute_loss(batch, model, criterion):
+    if isinstance(batch, list):
+        batch = merge_dicts(batch)
+
+    input_extrinsics = batch['extrinsic'].clone()
+    input_depths = batch['depth'].clone()
+    input_mask = batch['valid_mask'].clone()
+
+    if 'world_points' in batch:
+        new_extrinsics, _, new_world_points, new_depths = normalize_camera_extrinsics_and_points_batch(
+            extrinsics=batch['extrinsic'],
+            cam_points=None,
+            world_points=batch['world_points'],
+            depths=batch['depth'],
+            point_masks=batch['valid_mask'],
+        )
+        batch['extrinsic'] = new_extrinsics
+        batch['world_points'] = new_world_points
+        batch['depth'] = new_depths
+
+    inputs = {
+        'images': batch['images'],
+        'extrinsics': input_extrinsics,
+        'intrinsics': batch['intrinsic'],
+        'depth': input_depths,
+        'mask': input_mask
+    }
+    if 'object_images' in batch:
+        inputs['object_images'] = batch['object_images']
+
+    predictions = model(**inputs)
+
+    loss_details = {}
+    with torch.amp.autocast('cuda', enabled=False):
+        loss_dict = criterion(predictions, batch)
+        for key, value in loss_dict.items():
+            if isinstance(value, torch.Tensor):
+                loss_details[key] = value.detach().item()
+            else:
+                loss_details[key] = value
+
+    return batch, predictions, loss_dict, loss_details
+
+
+def run_validation(model, val_dataloader, criterion, accelerator, cfg, epoch, global_step, writer):
+    if val_dataloader is None:
+        return None
+
+    logger.info("=" * 60)
+    logger.info(f"Running validation at epoch {epoch + 1}")
+    logger.info("=" * 60)
+
+    model.eval()
+    aggregated_losses = {}
+
+    progress_bar = tqdm(
+        total=len(val_dataloader),
+        desc=f"Val {epoch + 1}",
+        disable=not accelerator.is_local_main_process,
+    )
+
+    for batch in val_dataloader:
+        with torch.no_grad():
+            _, _, loss_dict, _ = _prepare_batch_and_compute_loss(batch, model, criterion)
+
+        for key, value in loss_dict.items():
+            if torch.is_tensor(value):
+                reduced_value = accelerator.gather_for_metrics(value.detach().reshape(1)).mean().item()
+            else:
+                reduced_value = float(value)
+            aggregated_losses.setdefault(key, []).append(reduced_value)
+
+        progress_bar.update(1)
+
+    progress_bar.close()
+
+    mean_losses = {
+        key: sum(values) / len(values)
+        for key, values in aggregated_losses.items()
+        if values
+    }
+
+    if accelerator.is_main_process and mean_losses:
+        accelerator.log({f"val/{k}": v for k, v in mean_losses.items()}, step=global_step)
+
+        if cfg.get("wandb", False):
+            wandb.log({f"val/{k}": v for k, v in mean_losses.items()}, step=global_step)
+
+        if writer is not None:
+            for key, value in mean_losses.items():
+                writer.add_scalar(f"val/{key}", value, global_step)
+            writer.add_scalar("val/epoch", epoch, global_step)
+
+    if mean_losses:
+        logger.info(
+            "Validation summary: %s",
+            ", ".join(f"{key}={value:.6f}" for key, value in mean_losses.items())
+        )
+
+    model.train()
+    return mean_losses
+
+
 if __name__ == '__main__':
     # ======================================================
     # 1. Configuration and Initialization
@@ -159,6 +262,14 @@ if __name__ == '__main__':
         num_workers=cfg.get("num_workers", 8),
         test=False
     )
+    val_dataloader = None
+    if cfg.get("val_dataset", None):
+        val_dataloader = build_dataset(
+            dataset=cfg.val_dataset,
+            batch_size=cfg.get("val_batch_images", cfg.get("train_batch_images", 24)),
+            num_workers=cfg.get("num_workers", 8),
+            test=True
+        )
     raw_dataset = getattr(train_dataloader, "dataset", None)
     raw_sampler = getattr(train_dataloader, "sampler", None)
     dataset_num_samples = len(raw_dataset) if raw_dataset is not None else None
@@ -186,9 +297,13 @@ if __name__ == '__main__':
     logger.info("Preparing model, optimizer, and dataloaders for distributed training...")
     logger.info("Made all model parameters and buffers contiguous for DDP compatibility")
     
-    # Prepare model, optimizer, and dataloader FIRST (WITHOUT scheduler)
-    model, optimizer, train_dataloader = \
-        accelerator.prepare(model, optimizer, train_dataloader)
+    # Prepare model, optimizer, and dataloaders FIRST (WITHOUT scheduler)
+    if val_dataloader is not None:
+        model, optimizer, train_dataloader, val_dataloader = accelerator.prepare(
+            model, optimizer, train_dataloader, val_dataloader
+        )
+    else:
+        model, optimizer, train_dataloader = accelerator.prepare(model, optimizer, train_dataloader)
     
     # NOW calculate training steps based on ACTUAL sharded dataloader
     # After prepare(), len(train_dataloader) returns the LOCAL length for this process
@@ -268,6 +383,10 @@ if __name__ == '__main__':
     logger.info("Training Configuration Summary")
     logger.info("=" * 60)
     logger.info(f"  Number of epochs: {cfg.get('num_train_epochs')}")
+    logger.info(f"  Validation enabled: {val_dataloader is not None}")
+    if val_dataloader is not None:
+        logger.info(f"  Validation frequency (epochs): {cfg.get('val_epoch_freq', 1)}")
+        logger.info(f"  Validation batches (this process): {len(val_dataloader)}")
     if dataset_wrappers:
         logger.info(f"  Dataset wrappers: {dataset_wrappers}")
     if base_dataset is not None:
@@ -343,9 +462,6 @@ if __name__ == '__main__':
         
         # Training loop for this epoch
         for step, batch in enumerate(train_iter, start=step_in_epoch):
-            if isinstance(batch, list):
-                batch = merge_dicts(batch)
-
             if (
                 debug_print_object_paths
                 and accelerator.is_main_process
@@ -359,46 +475,12 @@ if __name__ == '__main__':
                     step,
                     max_samples=debug_print_object_paths_max_samples,
                 )
-            
-            # Store original inputs for model
-            input_extrinsics = batch['extrinsic'].clone()
-            input_depths = batch['depth'].clone()
-            input_mask = batch['valid_mask'].clone()
 
-            # Only normalize supervision targets when dense world-point GT is available.
-            if 'world_points' in batch:
-                new_extrinsics, _, new_world_points, new_depths = normalize_camera_extrinsics_and_points_batch(
-                    extrinsics=batch['extrinsic'],
-                    cam_points=None,
-                    world_points=batch['world_points'],
-                    depths=batch['depth'],
-                    point_masks=batch['valid_mask'],
-                )
-                batch['extrinsic'] = new_extrinsics
-                batch['world_points'] = new_world_points
-                batch['depth'] = new_depths
-            
-            # Forward pass
-            inputs = {
-                'images': batch['images'],
-                'extrinsics': input_extrinsics,
-                'intrinsics': batch['intrinsic'],
-                'depth': input_depths,
-                'mask': input_mask
-            }
-            if 'object_images' in batch:
-                inputs['object_images'] = batch['object_images']
-            predictions = model(**inputs)
-            
-            # Compute loss
-            loss_details = {}
-            with torch.amp.autocast('cuda', enabled=False):
-                loss_dict = train_criterion(predictions, batch)
-                for key, value in loss_dict.items():
-                    if isinstance(value, torch.Tensor):
-                        loss_details[key] = value.detach().item()
-                    else:
-                        loss_details[key] = value
+            batch, predictions, loss_dict, loss_details = _prepare_batch_and_compute_loss(
+                batch,
+                model,
+                train_criterion,
+            )
             
             accelerator.backward(loss_dict['objective'])
             progress_bar.set_postfix(**loss_details)
@@ -495,6 +577,21 @@ if __name__ == '__main__':
             epoch_save_path = os.path.join(save_dir, f"checkpoint-epoch-{epoch + 1}")
             logger.info(f"Saving end-of-epoch checkpoint to {epoch_save_path}...")
             accelerator.save_state(epoch_save_path)
+
+        if (
+            val_dataloader is not None
+            and (epoch + 1) % cfg.get("val_epoch_freq", 1) == 0
+        ):
+            run_validation(
+                model=model,
+                val_dataloader=val_dataloader,
+                criterion=train_criterion,
+                accelerator=accelerator,
+                cfg=cfg,
+                epoch=epoch,
+                global_step=global_step,
+                writer=writer,
+            )
         
         gc.collect()
         torch.cuda.empty_cache()
@@ -503,6 +600,18 @@ if __name__ == '__main__':
     logger.info("=" * 60)
     logger.info("Training Completed!")
     logger.info("=" * 60)
+
+    if val_dataloader is not None and cfg.get('num_train_epochs', 0) > 0:
+        run_validation(
+            model=model,
+            val_dataloader=val_dataloader,
+            criterion=train_criterion,
+            accelerator=accelerator,
+            cfg=cfg,
+            epoch=cfg.get('num_train_epochs') - 1,
+            global_step=global_step,
+            writer=writer,
+        )
     
     if accelerator.is_main_process:
         final_save_path = os.path.join(save_dir, "final_checkpoint")
