@@ -19,13 +19,14 @@ checkpointing_steps = 2000
 
 # == Model Configuration ==
 model_url = "/omni_vggt/omnivggt_pretrain_model/OmniVGGT.safetensors"
+# model_url = "/mnt/train-data-4-hdd/yian/freepose/omni-object/omnivggt_pretrain_model/OmniVGGT.safetensors"
 model_load_strict = False
 model_requires_grad = False
 patch_embed_freeze = True
 load_patch_embed_from_hub = False
 patch_embed_pretrained_path = None
 enable_point = False
-enable_depth = False
+enable_depth = True
 enable_camera = False
 enable_object_srt = True
 object_srt_head_freeze = False
@@ -121,7 +122,7 @@ vis_prediction_mode = "Predicted Depth"
 resume_model_path = None
 
 # == Dataset Configuration ==
-train_batch_images = 80
+train_batch_images = 60
 num_workers = 0
 resolution = (518, 518)
 

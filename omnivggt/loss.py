@@ -328,8 +328,13 @@ def compute_depth_loss(predictions, batch, gamma=1.0, alpha=0.2, gradient_loss_f
 
     gt_depth = batch['depth']
     gt_depth = check_and_fix_inf_nan(gt_depth, "gt_depth")
-    gt_depth = gt_depth[..., None]              # (B, H, W, 1)
     gt_depth_mask = batch['valid_mask'].clone()   # 3D points derived from depth map, so we use the same mask
+
+    if gt_depth.ndim != pred_depth.ndim:
+        raise ValueError(
+            f"Depth shape mismatch: pred_depth.shape={tuple(pred_depth.shape)} "
+            f"gt_depth.shape={tuple(gt_depth.shape)}"
+        )
 
     if gt_depth_mask.sum() < 100:
         # If there are less than 100 valid points, skip this batch
