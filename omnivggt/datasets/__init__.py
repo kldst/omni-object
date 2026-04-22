@@ -37,8 +37,16 @@ def get_data_loader(dataset, batch_size, num_workers=8,
         dataset = eval(dataset)
     
     try:
-        sampler = dataset.make_sampler(batch_size, shuffle=shuffle, world_size=world_size,
-                                       rank=rank, drop_last=drop_last)
+        # Let Accelerate own distributed sharding after `accelerator.prepare(...)`.
+        # Passing the real world_size/rank here would shard once in the sampler and
+        # then a second time in Accelerate, which halves steps per epoch incorrectly.
+        sampler = dataset.make_sampler(
+            batch_size,
+            shuffle=shuffle,
+            world_size=1,
+            rank=0,
+            drop_last=drop_last,
+        )
     except (AttributeError, NotImplementedError):
         # not avail for this dataset
         if torch.distributed.is_initialized():

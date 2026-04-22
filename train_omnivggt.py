@@ -274,6 +274,7 @@ if __name__ == '__main__':
     raw_sampler = getattr(train_dataloader, "sampler", None)
     dataset_num_samples = len(raw_dataset) if raw_dataset is not None else None
     sampler_num_samples = len(raw_sampler) if raw_sampler is not None else None
+    pre_prepare_batches = len(train_dataloader)
     base_dataset, dataset_wrappers = _unwrap_dataset(raw_dataset) if raw_dataset is not None else (None, [])
     base_records = getattr(base_dataset, "records", None) if base_dataset is not None else None
     run_counter = Counter(record["run_name"] for record in base_records) if base_records is not None else Counter()
@@ -334,6 +335,7 @@ if __name__ == '__main__':
         logger.info(f"  Dataset total samples: {dataset_num_samples}")
     if sampler_num_samples is not None:
         logger.info(f"  Sampler samples per epoch (before Accelerate sharding): {sampler_num_samples}")
+    logger.info(f"  Batches per epoch (before Accelerate sharding): {pre_prepare_batches}")
     logger.info(f"  Actual local batches: {actual_local_batches}")
     logger.info(f"  Gradient accumulation steps: {gradient_accumulation_steps}")
     logger.info(f"  Steps per epoch (per process): {local_steps_per_epoch}")
@@ -406,7 +408,8 @@ if __name__ == '__main__':
         logger.info(f"  Dataset total samples: {dataset_num_samples}")
     if sampler_num_samples is not None:
         logger.info(f"  Sampler samples per epoch: {sampler_num_samples}")
-    logger.info(f"  Examples per epoch (this process): {len(train_dataloader)}")
+    logger.info(f"  Batches per epoch (before Accelerate sharding): {pre_prepare_batches}")
+    logger.info(f"  Local batches per epoch (this process): {len(train_dataloader)}")
     logger.info(f"  Steps per epoch (this process): {local_steps_per_epoch}")
     logger.info(f"  Total training steps (this process): {total_training_steps}")
     logger.info("---")
