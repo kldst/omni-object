@@ -130,8 +130,8 @@ resolution = (518, 518)
 
 train_dataset = (
     "SixDPose("
-    "dataset_location='/mnt/train-data-4-hdd/yian/freepose/0421_randon_4000scene_30pose', "
-    "OBJECT_INPUT_ROOT='/mnt/train-data-4-hdd/yian/freepose/object_space_renders_all', "
+    "dataset_location='/dataset/0421_randon_4000scene_30pose', "
+    "OBJECT_INPUT_ROOT='/dataset/object_space_renders_all', "
     "dset='train', "
     "scene_num_views=1, "
     "object_input_views=(1, 5, 10, 15), "
@@ -146,8 +146,8 @@ train_dataset = (
 
 val_dataset = (
     "SixDPose("
-    "dataset_location='/mnt/train-data-4-hdd/yian/freepose/0421_randon_4000scene_30pose', "
-    "OBJECT_INPUT_ROOT='/mnt/train-data-4-hdd/yian/freepose/object_space_renders_all', "
+    "dataset_location='/dataset/0421_randon_4000scene_30pose', "
+    "OBJECT_INPUT_ROOT='/dataset/object_space_renders_all', "
     "dset='val', "
     "scene_num_views=1, "
     "object_input_views=(1, 5, 10, 15), "
