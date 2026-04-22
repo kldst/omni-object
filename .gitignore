@@ -155,3 +155,4 @@ skyseg.onnx
 *.egg-info
 
 omnivggt_pretrain_model/
+/infer
