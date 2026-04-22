@@ -6,7 +6,7 @@
 
 # == Common Configuration ==
 output_dir = "outputs"
-exp_name = "0419_omnivggt_trajectory"
+exp_name = "0422_omnivggt_multiscene"
 logging_dir = "logs"
 
 # == Logging Configuration ==
@@ -14,8 +14,8 @@ wandb = True
 tensorboard = False
 report_to = "tensorboard"
 num_save_log = 1
-num_save_visual = 10000
-checkpointing_steps = 2000
+num_save_visual = 100000
+checkpointing_steps = 6000
 
 # == Model Configuration ==
 model_url = "/omni_vggt/omnivggt_pretrain_model/OmniVGGT.safetensors"
@@ -26,7 +26,7 @@ patch_embed_freeze = True
 load_patch_embed_from_hub = False
 patch_embed_pretrained_path = None
 enable_point = False
-enable_depth = True
+enable_depth = False
 enable_camera = False
 enable_object_srt = True
 object_srt_head_freeze = False
@@ -122,21 +122,21 @@ vis_prediction_mode = "Predicted Depth"
 resume_model_path = None
 
 # == Dataset Configuration ==
-train_batch_images = 50
-val_batch_images = 50
+train_batch_images = 70
+val_batch_images = 70
 val_epoch_freq = 10
 num_workers = 0
 resolution = (518, 518)
 
 train_dataset = (
     "SixDPose("
-    "dataset_location='/dataset/0420_trajectory_40scene_500frame', "
-    "OBJECT_INPUT_ROOT='/dataset/object_space_renders_all', "
+    "dataset_location='/mnt/train-data-4-hdd/yian/freepose/0421_randon_4000scene_30pose', "
+    "OBJECT_INPUT_ROOT='/mnt/train-data-4-hdd/yian/freepose/object_space_renders_all', "
     "dset='train', "
     "scene_num_views=1, "
     "object_input_views=(1, 5, 10, 15), "
     "only_scene_start='scene_0000', "
-    "only_scene_end='scene_0079', "
+    "only_scene_end='scene_3499', "
     "verify_files=True, "
     "z_far=20, "
     "resolution=(518, 518), "
@@ -146,13 +146,13 @@ train_dataset = (
 
 val_dataset = (
     "SixDPose("
-    "dataset_location='/dataset/0419_trajectory_test_4scene_500frame', "
-    "OBJECT_INPUT_ROOT='/dataset/object_space_renders_all', "
+    "dataset_location='/mnt/train-data-4-hdd/yian/freepose/0421_randon_4000scene_30pose', "
+    "OBJECT_INPUT_ROOT='/mnt/train-data-4-hdd/yian/freepose/object_space_renders_all', "
     "dset='val', "
     "scene_num_views=1, "
     "object_input_views=(1, 5, 10, 15), "
-    "only_scene_start='scene_0000', "
-    "only_scene_end='scene_0005', "
+    "only_scene_start='scene_3500', "
+    "only_scene_end='scene_3999', "
     "verify_files=True, "
     "z_far=20, "
     "resolution=(518, 518), "

@@ -22,7 +22,7 @@ from .vkitti import Vkitti
 from .waymo import Waymo
 from .wildrgb import Wildrgb
 
-SixDPose = import_module("omnivggt.datasets.6Dpose.6dpose_trajectory").SixDPose
+SixDPose = import_module("omnivggt.datasets.6Dpose.6dpose_trajectory_noscale").SixDPose
 
 from omnivggt.datasets.utils.transforms import ImgNorm, ColorJitter
 

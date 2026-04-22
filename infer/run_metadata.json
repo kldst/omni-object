@@ -1,0 +1,27 @@
+{
+  "scene": "scene_0001",
+  "object_name": "google_Granimals_20_Wooden_ABC_Blocks_Wagon_85VdSftGsLi_meshes_model",
+  "config": "/mnt/train-data-4-hdd/yian/freepose/omni-object/configs/train.py",
+  "checkpoint": "/mnt/train-data-4-hdd/yian/freepose/omni-object/outputs/0420/model.safetensors",
+  "dataset_root": "/mnt/train-data-4-hdd/yian/freepose/0420_trajectory_40scene_500frame",
+  "object_render_root": "/mnt/train-data-4-hdd/yian/freepose/object_space_renders_all",
+  "obj_root": "/mnt/train-data-4-hdd/yian/freepose/data",
+  "output_dir": "/mnt/train-data-4-hdd/yian/freepose/omni-object/infer",
+  "device": "cuda",
+  "frame_count": 500,
+  "object_views": [
+    1,
+    5,
+    10,
+    15
+  ],
+  "resolution": [
+    518,
+    518
+  ],
+  "use_depth_input": true,
+  "mesh_scale_applied": 0.2,
+  "draw_gt": false,
+  "video_path": "/mnt/train-data-4-hdd/yian/freepose/omni-object/infer/overlays.mp4",
+  "video_fps": 12
+}
