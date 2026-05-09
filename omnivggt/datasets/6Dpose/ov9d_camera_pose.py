@@ -45,6 +45,7 @@ class OV9DCameraPose(BaseStereoViewDataset):
         name_to_oid_path: Optional[str] = None,
         num_object_views: int = 4,
         fixed_object_view_ids: Optional[Sequence[int]] = None,
+        strict_fixed_object_view_ids: bool = True,
         verify_files: bool = True,
         max_records: Optional[int] = None,
         only_scene_name: str = "",
@@ -65,6 +66,7 @@ class OV9DCameraPose(BaseStereoViewDataset):
         self.name_to_oid_path = Path(name_to_oid_path) if name_to_oid_path else self.dataset_location / "name2oid.json"
         self.num_object_views = int(num_object_views)
         self.fixed_object_view_ids = tuple(int(x) for x in fixed_object_view_ids) if fixed_object_view_ids else None
+        self.strict_fixed_object_view_ids = bool(strict_fixed_object_view_ids)
         self.verify_files = bool(verify_files)
         self.max_records = int(max_records) if max_records is not None else None
         self.only_scene_name = str(only_scene_name).strip()
@@ -84,11 +86,13 @@ class OV9DCameraPose(BaseStereoViewDataset):
                 f"split_json={self.split_json}, multi_root={self.multi_root}, single_root={self.single_root}"
             )
         logger.info(
-            "OV9DCameraPose initialized: dset=%s records=%d object_presence_prob=%.3f fixed_object_view_ids=%s",
+            "OV9DCameraPose initialized: dset=%s records=%d object_presence_prob=%.3f "
+            "fixed_object_view_ids=%s strict_fixed_object_view_ids=%s",
             self.dset,
             len(self.records),
             self.object_presence_prob,
             self.fixed_object_view_ids,
+            self.strict_fixed_object_view_ids,
         )
 
     def _default_split_json(self, dset: str) -> Path:
@@ -149,6 +153,15 @@ class OV9DCameraPose(BaseStereoViewDataset):
                 mask_path = scene_dir / "mask_visib" / f"{image_id:06d}_000000.png"
                 if not self.verify_files or mask_path.is_file():
                     image_ids.append(image_id)
+            if self.fixed_object_view_ids is not None and self.strict_fixed_object_view_ids:
+                missing_ids = [image_id for image_id in self.fixed_object_view_ids if image_id not in image_ids]
+                if missing_ids:
+                    logger.warning(
+                        "Skipping object reference scene %s because fixed_object_view_ids are missing: %s",
+                        scene_dir.name,
+                        missing_ids,
+                    )
+                    continue
             if len(image_ids) < self.num_object_views:
                 continue
             records.setdefault(int(object_id), []).append(
@@ -350,9 +363,46 @@ class OV9DCameraPose(BaseStereoViewDataset):
         out[mask > 0] = rgb_arr[mask > 0]
         return Image.fromarray(out, mode="RGB")
 
-    def _sample_object_ids(self, available_ids: List[int], rng) -> List[int]:
+    def _sample_object_ids(self, available_ids: List[int], rng, object_name: str = "") -> List[int]:
+        available_ids = [int(x) for x in available_ids]
         if self.fixed_object_view_ids is not None:
-            return list(self.fixed_object_view_ids)
+            if self.strict_fixed_object_view_ids:
+                missing_ids = [int(x) for x in self.fixed_object_view_ids if int(x) not in available_ids]
+                if missing_ids:
+                    raise RuntimeError(
+                        f"Missing fixed_object_view_ids for {object_name or 'object'}: "
+                        f"missing={missing_ids}, available={available_ids}"
+                    )
+                return list(self.fixed_object_view_ids)
+            fixed_ids = [int(x) for x in self.fixed_object_view_ids if int(x) in available_ids]
+            missing_ids = [int(x) for x in self.fixed_object_view_ids if int(x) not in available_ids]
+            fallback_ids = [image_id for image_id in available_ids if image_id not in fixed_ids]
+            needed = max(0, self.num_object_views - len(fixed_ids))
+            if needed > 0:
+                if len(fallback_ids) < needed:
+                    raise RuntimeError(
+                        f"Object reference views are insufficient for {object_name or 'object'}: "
+                        f"fixed={self.fixed_object_view_ids}, available={available_ids}, "
+                        f"need={self.num_object_views}"
+                    )
+                if self.training:
+                    extra_ids = rng.choice(np.asarray(fallback_ids), size=needed, replace=False).tolist()
+                    extra_ids = [int(x) for x in extra_ids]
+                else:
+                    extra_ids = fallback_ids[:needed]
+            else:
+                extra_ids = []
+            selected_ids = fixed_ids + extra_ids
+            if missing_ids:
+                logger.warning(
+                    "Missing fixed_object_view_ids for %s: missing=%s available_count=%d fallback=%s selected=%s",
+                    object_name or "object",
+                    missing_ids,
+                    len(available_ids),
+                    extra_ids,
+                    selected_ids,
+                )
+            return selected_ids
         count = min(self.num_object_views, len(available_ids))
         if self.training:
             return [int(x) for x in rng.choice(np.asarray(available_ids), size=count, replace=False).tolist()]
@@ -361,7 +411,7 @@ class OV9DCameraPose(BaseStereoViewDataset):
     def _load_object_images(self, object_id: int, resolution, rng) -> Dict[str, Any]:
         candidates = self.single_records_by_object_id[int(object_id)]
         single_rec = candidates[int(rng.integers(len(candidates)))] if self.training else candidates[0]
-        image_ids = self._sample_object_ids(single_rec["image_ids"], rng)
+        image_ids = self._sample_object_ids(single_rec["image_ids"], rng, object_name=single_rec["scene_name"])
         tensors = []
         true_shapes = []
         image_paths = []

@@ -124,6 +124,7 @@ resolution = (518, 518)
 # ov9d_root = "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d"
 ov9d_root = "/dataset/ov9d"
 fixed_object_view_ids = (10, 20, 30, 40)
+strict_fixed_object_view_ids = True
 
 train_dataset = (
     "OV9DCameraPose("
@@ -133,6 +134,7 @@ train_dataset = (
     # f"split_json='/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/splits_multi_4_3000/train.json', "
     "num_object_views=4, "
     f"fixed_object_view_ids={fixed_object_view_ids}, "
+    f"strict_fixed_object_view_ids={strict_fixed_object_view_ids}, "
     "verify_files=True, "
     f"object_presence_prob={object_presence_prob}, "
     "z_far=20, "
@@ -149,6 +151,7 @@ val_dataset = (
     # f"split_json='/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/splits_multi_4_3000/test1.json', "
     "num_object_views=4, "
     f"fixed_object_view_ids={fixed_object_view_ids}, "
+    f"strict_fixed_object_view_ids={strict_fixed_object_view_ids}, "
     "verify_files=True, "
     "object_presence_prob=0.3, "
     "z_far=20, "
