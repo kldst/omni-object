@@ -2,6 +2,7 @@ import json
 import os
 import os.path as osp
 import random
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -16,7 +17,11 @@ from omnivggt.datasets.base.base_stereo_view_dataset import (
     view_name,
 )
 from omnivggt.datasets.base.batched_sampler import BatchedRandomSampler
+import omnivggt.datasets.utils.cropping as cropping
 from omnivggt.utils.geometry import closed_form_inverse_se3, depthmap_to_absolute_camera_coordinates
+
+
+logger = logging.getLogger(__name__)
 
 
 class OV9DCameraPose(BaseStereoViewDataset):
@@ -44,6 +49,7 @@ class OV9DCameraPose(BaseStereoViewDataset):
         max_records: Optional[int] = None,
         only_scene_name: str = "",
         only_object_id: Optional[int] = None,
+        object_presence_prob: float = 1.0,
         *args,
         **kwargs,
     ):
@@ -63,6 +69,9 @@ class OV9DCameraPose(BaseStereoViewDataset):
         self.max_records = int(max_records) if max_records is not None else None
         self.only_scene_name = str(only_scene_name).strip()
         self.only_object_id = int(only_object_id) if only_object_id is not None else None
+        self.object_presence_prob = float(object_presence_prob)
+        if not 0.0 <= self.object_presence_prob <= 1.0:
+            raise ValueError(f"object_presence_prob must be in [0, 1], got {self.object_presence_prob}")
 
         self.models_info = self._load_json(self.models_info_path)
         self.name_to_oid = self._load_json(self.name_to_oid_path)
@@ -74,6 +83,13 @@ class OV9DCameraPose(BaseStereoViewDataset):
                 "No OV9D camera-frame samples found. "
                 f"split_json={self.split_json}, multi_root={self.multi_root}, single_root={self.single_root}"
             )
+        logger.info(
+            "OV9DCameraPose initialized: dset=%s records=%d object_presence_prob=%.3f fixed_object_view_ids=%s",
+            self.dset,
+            len(self.records),
+            self.object_presence_prob,
+            self.fixed_object_view_ids,
+        )
 
     def _default_split_json(self, dset: str) -> Path:
         split = "test1" if dset in {"val", "validation", "test"} else str(dset)
@@ -189,12 +205,97 @@ class OV9DCameraPose(BaseStereoViewDataset):
         depth_m[depth_m < 0.0] = 0.0
         return depth_m.astype(np.float32)
 
-    def _load_scene_view(self, scene_dir: Path, image_id: int, camera_entry: Dict[str, Any], resolution, rng):
+    @staticmethod
+    def _read_binary_mask(mask_path: Path) -> np.ndarray:
+        return (np.asarray(Image.open(mask_path).convert("L"), dtype=np.uint8) > 0).astype(np.float32)
+
+    def _crop_resize_if_necessary_with_mask(
+        self,
+        image,
+        depthmap,
+        object_mask,
+        intrinsics,
+        resolution,
+        rng=None,
+        info=None,
+    ):
+        if not isinstance(image, Image.Image):
+            image = Image.fromarray(image)
+        if object_mask.shape[:2] != depthmap.shape[:2]:
+            raise ValueError(
+                f"Object mask shape mismatch for {info}: mask={object_mask.shape[:2]} depth={depthmap.shape[:2]}"
+            )
+
+        width, height = image.size
+        cx, cy = intrinsics[:2, 2].round().astype(int)
+        min_margin_x = min(cx, width - cx)
+        min_margin_y = min(cy, height - cy)
+        assert min_margin_x > width / 5, f"Bad principal point in view={info}"
+        assert min_margin_y > height / 5, f"Bad principal point in view={info}"
+        left, top = cx - min_margin_x, cy - min_margin_y
+        right, bottom = cx + min_margin_x, cy + min_margin_y
+        crop_bbox = (left, top, right, bottom)
+        image, depthmap, intrinsics = cropping.crop_image_depthmap(image, depthmap, intrinsics, crop_bbox)
+        object_mask = object_mask[top:bottom, left:right]
+
+        target_resolution = np.array(resolution)
+        if self.aug_focal:
+            crop_scale = self.aug_focal + (1.0 - self.aug_focal) * np.random.beta(0.5, 0.5)
+            input_resolution = np.array(image.size)
+            output_resolution = np.floor(input_resolution * crop_scale).astype(int)
+            margins = input_resolution - output_resolution
+            offset = margins / 2
+            left, top = offset.astype(int)
+            right = left + output_resolution[0]
+            bottom = top + output_resolution[1]
+            crop_bbox = (left, top, right, bottom)
+            image, depthmap, intrinsics = cropping.crop_image_depthmap(image, depthmap, intrinsics, crop_bbox)
+            object_mask = object_mask[top:bottom, left:right]
+
+        if self.aug_crop > 1:
+            target_resolution += rng.integers(0, self.aug_crop)
+
+        input_resolution = np.array(image.size)
+        scale_final = max(target_resolution / image.size) + 1e-8
+        output_resolution = np.floor(input_resolution * scale_final).astype(int)
+        image, depthmap, intrinsics = cropping.rescale_image_depthmap(
+            image,
+            depthmap,
+            intrinsics,
+            target_resolution,
+        )
+        resampling = getattr(Image, "Resampling", Image)
+        object_mask = np.asarray(
+            Image.fromarray((object_mask > 0).astype(np.uint8) * 255).resize(
+                tuple(output_resolution),
+                resampling.NEAREST,
+            ),
+            dtype=np.uint8,
+        ) > 0
+
+        intrinsics2 = cropping.camera_matrix_of_crop(intrinsics, image.size, resolution, offset_factor=0.5)
+        crop_bbox = cropping.bbox_from_intrinsics_in_out(intrinsics, intrinsics2, resolution)
+        left, top, right, bottom = crop_bbox
+        image, depthmap, intrinsics2 = cropping.crop_image_depthmap(image, depthmap, intrinsics, crop_bbox)
+        object_mask = object_mask[top:bottom, left:right]
+
+        return image, depthmap, object_mask.astype(np.bool_), intrinsics2
+
+    def _load_scene_view(
+        self,
+        scene_dir: Path,
+        image_id: int,
+        camera_entry: Dict[str, Any],
+        resolution,
+        rng,
+        object_mask_path: Optional[Path] = None,
+    ):
         image_path = scene_dir / "rgb" / f"{image_id:06d}.png"
         depth_path = scene_dir / "depth" / f"{image_id:06d}.png"
         mask_dir = scene_dir / "mask_visib"
         image = Image.open(image_path).convert("RGB")
         depthmap = self._read_depth_m(depth_path, camera_entry)
+        object_mask = self._read_binary_mask(object_mask_path) if object_mask_path is not None else None
         intrinsic = self._as_matrix(camera_entry["cam_K"], (3, 3))
         r_w2c = self._as_matrix(camera_entry["cam_R_w2c"], (3, 3))
         t_w2c = np.asarray(camera_entry["cam_t_w2c"], dtype=np.float32).reshape(3) / 1000.0
@@ -203,11 +304,22 @@ class OV9DCameraPose(BaseStereoViewDataset):
             np.concatenate([extrinsic, np.array([[0, 0, 0, 1]], dtype=np.float32)], axis=0)[None]
         )[0]
 
-        image, depthmap, intrinsic = self._crop_resize_if_necessary(
-            image, depthmap, intrinsic, resolution, rng, info=str(image_path)
-        )
+        if object_mask is None:
+            image, depthmap, intrinsic = self._crop_resize_if_necessary(
+                image, depthmap, intrinsic, resolution, rng, info=str(image_path)
+            )
+        else:
+            image, depthmap, object_mask, intrinsic = self._crop_resize_if_necessary_with_mask(
+                image,
+                depthmap,
+                object_mask,
+                intrinsic,
+                resolution,
+                rng,
+                info=str(image_path),
+            )
         _, point_mask = depthmap_to_absolute_camera_coordinates(depthmap, intrinsic, c2w, z_far=self.z_far)
-        return {
+        view = {
             "img": image,
             "depthmap": depthmap.astype(np.float32),
             "camera_pose": extrinsic,
@@ -220,6 +332,9 @@ class OV9DCameraPose(BaseStereoViewDataset):
             "camera_path": str(scene_dir / "scene_camera.json"),
             "mask_dir": str(mask_dir),
         }
+        if object_mask is not None:
+            view["object_mask"] = object_mask
+        return view
 
     @staticmethod
     def _resize_image(image: Image.Image, resolution) -> Image.Image:
@@ -274,6 +389,19 @@ class OV9DCameraPose(BaseStereoViewDataset):
         size_m = np.clip(size_m, 1e-6, None)
         return size_m.astype(np.float32), np.log(size_m).astype(np.float32)
 
+    def _sample_absent_object_id(self, scene_gt: Dict[str, Any], image_id: int, positive_object_id: int, rng) -> Optional[int]:
+        present_ids = {int(gt.get("obj_id", -1)) for gt in scene_gt[str(image_id)]}
+        candidates = [
+            object_id
+            for object_id in self.single_records_by_object_id.keys()
+            if object_id not in present_ids and object_id != int(positive_object_id)
+        ]
+        if self.only_object_id is not None:
+            candidates = [object_id for object_id in candidates if object_id == self.only_object_id]
+        if not candidates:
+            return None
+        return int(rng.choice(np.asarray(sorted(candidates), dtype=np.int64)))
+
     def __getitem__(self, idx):
         if isinstance(idx, tuple):
             idx, ar_idx, *_ = idx
@@ -290,12 +418,32 @@ class OV9DCameraPose(BaseStereoViewDataset):
         scene_gt = self._load_json(rec["scene_dir"] / "scene_gt.json")
         scene_camera = self._load_json(rec["scene_dir"] / "scene_camera.json")
         image_id = int(rng.choice(rec["image_ids"])) if self.training else int(rec["image_ids"][0])
-        object_index = self._object_index_for_id(scene_gt[str(image_id)], rec["object_id"])
-        if object_index is None:
-            raise KeyError(f"Object {rec['object_id']} not found in {rec['scene_name']} frame {image_id}")
-        scene_mask_path = rec["scene_dir"] / "mask_visib" / f"{image_id:06d}_{object_index:06d}.png"
+        target_object_id = int(rec["object_id"])
+        has_object = True
+        if self.training and self.object_presence_prob < 1.0 and float(rng.random()) > self.object_presence_prob:
+            absent_object_id = self._sample_absent_object_id(scene_gt, image_id, target_object_id, rng)
+            if absent_object_id is not None:
+                target_object_id = absent_object_id
+                has_object = False
 
-        view = self._load_scene_view(rec["scene_dir"], image_id, scene_camera[str(image_id)], resolution, rng)
+        object_index = self._object_index_for_id(scene_gt[str(image_id)], target_object_id)
+        if has_object:
+            if object_index is None:
+                raise KeyError(f"Object {target_object_id} not found in {rec['scene_name']} frame {image_id}")
+            scene_mask_path = rec["scene_dir"] / "mask_visib" / f"{image_id:06d}_{object_index:06d}.png"
+        else:
+            scene_mask_path = None
+
+        view = self._load_scene_view(
+            rec["scene_dir"],
+            image_id,
+            scene_camera[str(image_id)],
+            resolution,
+            rng,
+            object_mask_path=scene_mask_path,
+        )
+        if "object_mask" not in view:
+            view["object_mask"] = np.zeros_like(view["point_mask"], dtype=np.bool_)
         view["idx"] = (idx, ar_idx, 0)
         view["dataset"] = self.dataset_label
         view["z_far"] = self.z_far
@@ -307,10 +455,14 @@ class OV9DCameraPose(BaseStereoViewDataset):
         transpose_to_landscape(view)
         view["rng"] = int.from_bytes(rng.bytes(4), "big")
 
-        gt = scene_gt[str(image_id)][object_index]
-        object_rotation = self._as_matrix(gt["cam_R_m2c"], (3, 3))
-        object_translation = np.asarray(gt["cam_t_m2c"], dtype=np.float32).reshape(3) / 1000.0
-        object_size, object_size_log = self._object_size_targets(rec["object_id"])
+        if has_object:
+            gt = scene_gt[str(image_id)][object_index]
+            object_rotation = self._as_matrix(gt["cam_R_m2c"], (3, 3))
+            object_translation = np.asarray(gt["cam_t_m2c"], dtype=np.float32).reshape(3) / 1000.0
+        else:
+            object_rotation = np.eye(3, dtype=np.float32)
+            object_translation = np.zeros(3, dtype=np.float32)
+        object_size, object_size_log = self._object_size_targets(target_object_id)
 
         result = {
             "images": torch.stack([view["img"]]),
@@ -319,17 +471,18 @@ class OV9DCameraPose(BaseStereoViewDataset):
             "intrinsic": np.stack([view["camera_intrinsics"]]),
             "true_shape": np.stack([view["true_shape"]]),
             "valid_mask": np.stack([view["point_mask"]]),
+            "object_masks": np.stack([view["object_mask"]]),
             "label": [view["label"]],
             "instance": [view["instance"]],
             "dataset": self.dataset_label,
             "ids": np.array([image_id], dtype=np.int64),
             "camera_indices": np.array([image_id], dtype=np.int64),
-            "seq_name": f"ov9d_camera_pose/{rec['scene_name']}/obj_{rec['object_id']:06d}/{image_id:06d}",
+            "seq_name": f"ov9d_camera_pose/{rec['scene_name']}/obj_{target_object_id:06d}/{image_id:06d}",
             "scene_name": rec["scene_name"],
             "run_name": rec["scene_name"],
-            "object_name": f"obj_{rec['object_id']:06d}",
-            "object_id": np.array(rec["object_id"], dtype=np.int64),
-            "has_object": np.array(True, dtype=np.bool_),
+            "object_name": f"obj_{target_object_id:06d}",
+            "object_id": np.array(target_object_id, dtype=np.int64),
+            "has_object": np.array(has_object, dtype=np.bool_),
             "object_rotation": object_rotation.astype(np.float32),
             "object_translation": object_translation.astype(np.float32),
             "object_size": object_size,
@@ -338,9 +491,9 @@ class OV9DCameraPose(BaseStereoViewDataset):
             "scene_rgb_path": view["image_path"],
             "scene_depth_path": view["depth_path"],
             "scene_camera_path": view["camera_path"],
-            "scene_mask_path": str(scene_mask_path),
+            "scene_mask_path": str(scene_mask_path) if scene_mask_path is not None else "",
         }
-        result.update(self._load_object_images(rec["object_id"], resolution, rng))
+        result.update(self._load_object_images(target_object_id, resolution, rng))
         return result
 
     def make_sampler(self, batch_size, shuffle=True, world_size=1, rank=0, drop_last=True):

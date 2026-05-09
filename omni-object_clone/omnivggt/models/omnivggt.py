@@ -3,6 +3,7 @@ import torch.nn as nn
 from huggingface_hub import PyTorchModelHubMixin  # used for model hub
 
 from omnivggt.heads.object_pose_head import ObjectPoseHead, ObjectPoseHeadConfig
+from omnivggt.heads.object_mask_head import ObjectMaskHead
 from omnivggt.models.omnivggt_aggregator import ZeroAggregator
 from omnivggt.heads.camera_head import CameraHead
 from omnivggt.heads.dpt_head import DPTHead
@@ -78,6 +79,7 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
                  patch_embed_pretrained_path=None,
                  load_patch_embed_from_hub=True,
                  enable_camera=True, enable_depth=True, enable_point=True,
+                 enable_object_mask=False,
                  enable_object_srt=False,
                  object_pose_context_pool="flatten",
                  object_pose_use_global_scene_object_concat=False,
@@ -136,6 +138,11 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
         self.camera_head = CameraHead(dim_in=2 * embed_dim) if enable_camera else None
         self.point_head = DPTHead(dim_in=2 * embed_dim, output_dim=4, activation="inv_log", conf_activation="expp1") if enable_point else None
         self.depth_head = DPTHead(dim_in=2 * embed_dim, output_dim=2, activation="exp", conf_activation="expp1") if enable_depth else None
+        self.object_mask_head = (
+            ObjectMaskHead(dim_in=2 * embed_dim, patch_size=patch_size)
+            if enable_object_mask
+            else None
+        )
         self.object_srt_head = None
         if enable_object_srt:
             object_pose_cfg = ObjectPoseHeadConfig(
@@ -320,6 +327,15 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
                 predictions["world_points"] = pts3d
                 predictions["world_points_conf"] = pts3d_conf
 
+            if self.object_mask_head is not None:
+                predictions.update(
+                    self.object_mask_head(
+                        aggregated_tokens_list,
+                        images=images,
+                        patch_start_idx=patch_start_idx,
+                    )
+                )
+
             if self.object_srt_head is not None:
                 predictions.update(
                     self.object_srt_head(
@@ -408,6 +424,15 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
                 )
                 predictions["world_points"] = pts3d
                 predictions["world_points_conf"] = pts3d_conf
+
+            if self.object_mask_head is not None:
+                predictions.update(
+                    self.object_mask_head(
+                        aggregated_tokens_list,
+                        images=images,
+                        patch_start_idx=patch_start_idx,
+                    )
+                )
 
             if self.object_srt_head is not None:
                 predictions.update(

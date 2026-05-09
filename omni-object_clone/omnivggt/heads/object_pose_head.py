@@ -84,15 +84,18 @@ class ObjectPoseTransformerDecoderHead(nn.Module):
         self.decpose = nn.Linear(self.cfg.transformer_dim, 6)
         self.dectranslate = nn.Linear(self.cfg.transformer_dim, 3)
         self.decsize = nn.Linear(self.cfg.transformer_dim, 3)
+        self.presence_branch = nn.Linear(self.cfg.transformer_dim, 1)
         nn.init.xavier_uniform_(self.decpose.weight, gain=0.01)
         nn.init.xavier_uniform_(self.dectranslate.weight, gain=0.01)
         nn.init.xavier_uniform_(self.decsize.weight, gain=0.01)
+        nn.init.xavier_uniform_(self.presence_branch.weight, gain=0.01)
 
-    def forward(self, context_tokens: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, context_tokens: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         batch_size = context_tokens.shape[0]
         pred_pose = self.init_pose.expand(batch_size, -1)
         pred_translate = self.init_translate.expand(batch_size, -1)
         pred_size_log = self.init_size_log.expand(batch_size, -1)
+        presence_logits = None
 
         for _ in range(int(self.cfg.ief_iters)):
             token = torch.zeros((batch_size, 1, 1), device=context_tokens.device, dtype=context_tokens.dtype)
@@ -100,8 +103,9 @@ class ObjectPoseTransformerDecoderHead(nn.Module):
             pred_pose = self.decpose(token_out) + pred_pose
             pred_translate = self.dectranslate(token_out) + pred_translate
             pred_size_log = self.decsize(token_out) + pred_size_log
+            presence_logits = self.presence_branch(token_out).squeeze(-1)
 
-        return pred_pose, pred_translate, pred_size_log
+        return pred_pose, pred_translate, pred_size_log, presence_logits
 
 
 class ObjectPoseHead(nn.Module):
@@ -135,11 +139,12 @@ class ObjectPoseHead(nn.Module):
             scene_global = patch_tokens.mean(dim=(1, 2))
             object_global = object_tokens.mean(dim=(1, 2))
             context_tokens = torch.cat([scene_global, object_global], dim=-1).unsqueeze(1)
-            object_pose, object_translation, object_size_log = self.decoder(context_tokens)
+            object_pose, object_translation, object_size_log, object_presence_logits = self.decoder(context_tokens)
             return {
                 "object_pose": object_pose,
                 "object_translation": object_translation,
                 "object_size_log": object_size_log,
+                "object_presence_logits": object_presence_logits,
             }
 
         if self.context_pool == "mean":
@@ -156,11 +161,12 @@ class ObjectPoseHead(nn.Module):
                 raise ValueError(f"object_latent should be (B,S,C), got {tuple(object_latent.shape)}")
             context_tokens = torch.cat([object_latent, context_tokens], dim=1)
 
-        object_pose, object_translation, object_size_log = self.decoder(context_tokens)
+        object_pose, object_translation, object_size_log, object_presence_logits = self.decoder(context_tokens)
         return {
             "object_pose": object_pose,
             "object_translation": object_translation,
             "object_size_log": object_size_log,
+            "object_presence_logits": object_presence_logits,
         }
 
 

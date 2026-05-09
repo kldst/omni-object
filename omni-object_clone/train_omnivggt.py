@@ -140,6 +140,7 @@ def _print_paths_from_batch(logger_obj, batch, sample_idx):
 
 def _print_object_target_values(logger_obj, batch, sample_idx, include_depth_stats=True):
     target_keys = (
+        "has_object",
         "object_id",
         "object_rotation",
         "object_translation",
@@ -152,6 +153,20 @@ def _print_object_target_values(logger_obj, batch, sample_idx, include_depth_sta
         value = _sample_batch_item(batch.get(key), sample_idx)
         if value is not None:
             logger_obj.info("  %s: %s", key, _format_debug_value(value))
+
+    object_mask = _sample_batch_item(batch.get("object_masks"), sample_idx)
+    if object_mask is not None:
+        mask_t = (
+            object_mask.detach().float().cpu()
+            if isinstance(object_mask, torch.Tensor)
+            else torch.as_tensor(object_mask).float()
+        )
+        logger_obj.info(
+            "  object_mask_stats: shape=%s mean=%.6f pixels=%d",
+            tuple(mask_t.shape),
+            float(mask_t.mean()) if mask_t.numel() > 0 else 0.0,
+            int((mask_t > 0).sum().item()) if mask_t.numel() > 0 else 0,
+        )
 
     if include_depth_stats and "depth" in batch:
         depth = _sample_batch_item(batch.get("depth"), sample_idx)
@@ -432,7 +447,8 @@ def run_validation(model, val_dataloader, criterion, accelerator, cfg, epoch, gl
                     "val_step/global_step": global_step,
                     "val_step/batch_index": batch_idx,
                     **{f"val_step/{k}": v for k, v in batch_losses.items()},
-                }
+                },
+                step=global_step,
             )
 
         preferred_postfix_keys = (

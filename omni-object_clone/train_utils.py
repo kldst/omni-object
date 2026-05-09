@@ -242,6 +242,7 @@ def load_model(cfg: Any, device: torch.device) -> Tuple[OmniVGGT, torch.dtype]:
         enable_camera=cfg.get("enable_camera", True),
         enable_point=cfg.get("enable_point", True),
         enable_depth=cfg.get("enable_depth", True),
+        enable_object_mask=cfg.get("enable_object_mask", False),
         enable_object_srt=cfg.get("enable_object_srt", False),
         cam_drop_prob=cfg.get("cam_drop_prob", 0.1),
         depth_drop_prob=cfg.get("depth_drop_prob", 0.1),
@@ -415,6 +416,20 @@ def build_optimizer(model: torch.nn.Module, cfg: Any) -> torch.optim.Optimizer:
             })
             logger.info(f"object_srt_head lr set to {cfg.get('lr_object_srt_head', cfg.get('lr'))}")
 
+    if cfg.get("enable_object_mask", False) and getattr(model, "object_mask_head", None) is not None:
+        exclude_keys.append("object_mask_head")
+        if cfg.get("object_mask_head_freeze", False):
+            _set_module_trainable(model.object_mask_head, False)
+            logger.info("object_mask_head parameters are frozen.")
+        else:
+            object_mask_params = _set_module_trainable(model.object_mask_head, True)
+            param_groups.append({
+                "params": object_mask_params,
+                "lr": cfg.get("lr_object_mask_head", cfg.get("lr_head", cfg.get("lr"))),
+                "name": "object_mask_head"
+            })
+            logger.info(f"object_mask_head lr set to {cfg.get('lr_object_mask_head', cfg.get('lr'))}")
+
     if getattr(model, "object_token_cross_attn_blocks", None) is not None:
         exclude_keys.append("object_token_cross_attn_blocks")
         if cfg.get("object_cross_attn_freeze", False):
@@ -509,6 +524,16 @@ def build_loss_criterion(cfg: Any) -> MultitaskLoss:
             "symmetry_info_path": cfg.get("object_srt_symmetry_info_path", ""),
             "symmetry_continuous_steps": cfg.get("object_srt_symmetry_continuous_steps", 72),
         } if cfg.get("enable_object_srt", False) else None,
+        object_mask={
+            "weight": cfg.get("object_mask_loss_weight", 1.0),
+            "bce_weight": cfg.get("object_mask_bce_weight", 1.0),
+            "dice_weight": cfg.get("object_mask_dice_weight", 1.0),
+            "pos_weight": cfg.get("object_mask_pos_weight", 1.0),
+        } if cfg.get("enable_object_mask", False) else None,
+        object_presence={
+            "weight": cfg.get("object_presence_loss_weight", 1.0),
+            "pos_weight": cfg.get("object_presence_pos_weight", None),
+        } if cfg.get("enable_object_presence", cfg.get("enable_object_srt", False)) else None,
     )
     
     logger.info("Loss criterion initialized:")
@@ -517,5 +542,9 @@ def build_loss_criterion(cfg: Any) -> MultitaskLoss:
     logger.info(f"  Point loss weight: {cfg.get('point_loss_weight', 1.0)}")
     if cfg.get("enable_object_srt", False):
         logger.info(f"  Object SRT loss weight: {cfg.get('object_srt_loss_weight', 1.0)}")
+    if cfg.get("enable_object_mask", False):
+        logger.info(f"  Object mask loss weight: {cfg.get('object_mask_loss_weight', 1.0)}")
+    if cfg.get("enable_object_presence", cfg.get("enable_object_srt", False)):
+        logger.info(f"  Object presence loss weight: {cfg.get('object_presence_loss_weight', 1.0)}")
     
     return criterion

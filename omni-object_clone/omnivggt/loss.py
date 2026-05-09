@@ -28,7 +28,8 @@ class MultitaskLoss(torch.nn.Module):
     - Point loss
     - Tracking loss (not cleaned yet, dirty code is at the bottom of this file)
     """
-    def __init__(self, camera=None, depth=None, point=None, track=None, object_srt=None,
+    def __init__(self, camera=None, depth=None, point=None, track=None, object_mask=None, object_srt=None,
+                 object_presence=None,
                  debug_force_model_output_to_ground_truth=False, **kwargs):
         super().__init__()
         # Loss configuration dictionaries for each task
@@ -36,7 +37,9 @@ class MultitaskLoss(torch.nn.Module):
         self.depth = depth
         self.point = point
         self.track = track
+        self.object_mask = object_mask
         self.object_srt = object_srt
+        self.object_presence = object_presence
         self.debug_force_model_output_to_ground_truth = bool(debug_force_model_output_to_ground_truth)
 
     def forward(self, predictions, batch) -> torch.Tensor:
@@ -76,6 +79,15 @@ class MultitaskLoss(torch.nn.Module):
             total_loss = total_loss + point_loss
             loss_dict.update(point_loss_dict)
 
+        if "object_mask_logits" in predictions and self.object_mask is not None:
+            object_mask_loss_dict = compute_object_mask_loss(
+                predictions,
+                batch,
+                **self.object_mask,
+            )
+            total_loss = total_loss + object_mask_loss_dict["loss_object_mask"] * self.object_mask["weight"]
+            loss_dict.update(object_mask_loss_dict)
+
         if "object_pose" in predictions and self.object_srt is not None:
             object_srt_loss_dict = compute_object_srt_loss(
                 predictions,
@@ -85,6 +97,18 @@ class MultitaskLoss(torch.nn.Module):
             )
             total_loss = total_loss + object_srt_loss_dict["loss_object_srt"] * self.object_srt["weight"]
             loss_dict.update(object_srt_loss_dict)
+
+        if "object_presence_logits" in predictions and self.object_presence is not None:
+            object_presence_loss_dict = compute_object_presence_loss(
+                predictions,
+                batch,
+                **self.object_presence,
+            )
+            total_loss = (
+                total_loss
+                + object_presence_loss_dict["loss_object_presence"] * self.object_presence["weight"]
+            )
+            loss_dict.update(object_presence_loss_dict)
         
         loss_dict["objective"] = total_loss
 
@@ -266,6 +290,83 @@ def compute_object_srt_loss(
         "loss_object_pose": loss_pose,
         "loss_object_translation": loss_translation,
         "loss_object_size": loss_size,
+    }
+
+
+def compute_object_mask_loss(
+    predictions,
+    batch,
+    bce_weight=1.0,
+    dice_weight=1.0,
+    pos_weight=1.0,
+    eps=1e-6,
+    **kwargs,
+):
+    pred_logits = predictions["object_mask_logits"]
+    gt_mask = batch.get("object_masks", batch.get("point_masks"))
+    if gt_mask is None:
+        dummy = (pred_logits * 0).mean()
+        return {
+            "loss_object_mask": dummy,
+            "loss_object_mask_bce": dummy,
+            "loss_object_mask_dice": dummy,
+        }
+
+    gt_mask = gt_mask.to(device=pred_logits.device, dtype=pred_logits.dtype)
+    if gt_mask.shape != pred_logits.shape:
+        raise ValueError(f"object mask shape mismatch: pred={tuple(pred_logits.shape)} gt={tuple(gt_mask.shape)}")
+
+    has_object = batch.get("has_object", None)
+    if has_object is not None:
+        valid_mask = has_object.to(device=pred_logits.device).bool()
+        if valid_mask.sum() == 0:
+            dummy = (pred_logits * 0).mean()
+            return {
+                "loss_object_mask": dummy,
+                "loss_object_mask_bce": dummy,
+                "loss_object_mask_dice": dummy,
+            }
+        pred_logits = pred_logits[valid_mask]
+        gt_mask = gt_mask[valid_mask]
+
+    pos_weight_tensor = torch.as_tensor(float(pos_weight), device=pred_logits.device, dtype=pred_logits.dtype)
+    loss_bce = F.binary_cross_entropy_with_logits(pred_logits, gt_mask, pos_weight=pos_weight_tensor)
+
+    pred_prob = torch.sigmoid(pred_logits)
+    reduce_dims = tuple(range(1, pred_prob.dim()))
+    intersection = (pred_prob * gt_mask).sum(dim=reduce_dims)
+    union = pred_prob.sum(dim=reduce_dims) + gt_mask.sum(dim=reduce_dims)
+    loss_dice = 1.0 - ((2.0 * intersection + eps) / (union + eps))
+    loss_dice = loss_dice.mean()
+
+    total = float(bce_weight) * loss_bce + float(dice_weight) * loss_dice
+    return {
+        "loss_object_mask": total,
+        "loss_object_mask_bce": loss_bce,
+        "loss_object_mask_dice": loss_dice,
+    }
+
+
+def compute_object_presence_loss(
+    predictions,
+    batch,
+    pos_weight=None,
+    **kwargs,
+):
+    if "has_object" not in batch:
+        raise KeyError("object_presence loss requires batch['has_object']")
+
+    logits = predictions["object_presence_logits"].float().reshape(-1)
+    targets = batch["has_object"].to(device=logits.device, dtype=logits.dtype).reshape(-1)
+    bce_kwargs = {}
+    if pos_weight is not None:
+        bce_kwargs["pos_weight"] = torch.as_tensor(float(pos_weight), device=logits.device, dtype=logits.dtype)
+    loss_presence = F.binary_cross_entropy_with_logits(logits, targets, **bce_kwargs)
+    pred_binary = (torch.sigmoid(logits) >= 0.5).to(dtype=targets.dtype)
+    acc = (pred_binary == targets).float().mean()
+    return {
+        "loss_object_presence": loss_presence,
+        "acc_object_presence": acc,
     }
 
 
