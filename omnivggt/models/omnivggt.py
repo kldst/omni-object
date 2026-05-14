@@ -81,6 +81,7 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
                  enable_camera=True, enable_depth=True, enable_point=True,
                  enable_object_mask=False,
                  enable_object_srt=False,
+                 enable_object_size=True,
                  object_pose_context_pool="flatten",
                  object_pose_use_global_scene_object_concat=False,
                  object_pose_transformer_depth=6,
@@ -156,15 +157,17 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
                 transformer_dim=object_pose_transformer_dim,
                 ief_iters=object_pose_ief_iters,
                 init_params_path=object_pose_init_params_path,
+                predict_size=enable_object_size,
             )
             self.object_srt_head = ObjectPoseHead(
                 dim_in=2 * embed_dim,
                 object_pose_cfg=object_pose_cfg,
                 context_pool=object_pose_context_pool,
                 use_global_scene_object_concat=object_pose_use_global_scene_object_concat,
+                predict_size=enable_object_size,
             )
 
-    def _ensure_batched_images(self, images: torch.Tensor):
+    def _ensure_batched_images(self, images: torch.Tensor): # 確保 batch 維度存在
         if images is None:
             return None
         if len(images.shape) == 4:

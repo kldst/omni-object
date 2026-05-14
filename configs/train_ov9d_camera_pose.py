@@ -13,7 +13,7 @@ tensorboard = False
 report_to = "tensorboard"
 num_save_log = 1
 num_save_visual = 100000
-checkpointing_steps = 6000
+checkpointing_steps = 2000
 
 # Model
 model_url = "/all_data/model.safetensors"
@@ -111,8 +111,8 @@ object_srt_pose_rep = "symmetric_rot6d"
 object_srt_weight_pose = 1.0
 object_srt_weight_translation = 1.0
 object_srt_weight_size = 1.0
-# object_srt_symmetry_info_path = "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d/models_info.json"
-object_srt_symmetry_info_path = "/dataset/ov9d/models_info.json"
+object_srt_symmetry_info_path = "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d/models_info.json"
+# object_srt_symmetry_info_path = "/dataset/ov9d/models_info.json"
 object_srt_symmetry_continuous_steps = 72
 
 # Dataset
@@ -121,8 +121,8 @@ val_batch_images = 60
 val_epoch_freq = 10
 num_workers = 0
 resolution = (518, 518)
-# ov9d_root = "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d"
-ov9d_root = "/dataset/ov9d"
+ov9d_root = "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d"
+# ov9d_root = "/dataset/ov9d"
 fixed_object_view_ids = (10, 20, 30, 40)
 strict_fixed_object_view_ids = True
 
@@ -130,8 +130,8 @@ train_dataset = (
     "OV9DCameraPose("
     f"dataset_location='{ov9d_root}', "
     "dset='train', "
-    f"split_json='/omni-object_clone/splits_multi_4_3000/train.json', "
-    # f"split_json='/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/splits_multi_4_3000/train.json', "
+    # f"split_json='/omni-object_clone/splits_multi_4_3000/train.json', "
+    f"split_json='/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/splits_multi_4_3000/train.json', "
     "num_object_views=4, "
     f"fixed_object_view_ids={fixed_object_view_ids}, "
     f"strict_fixed_object_view_ids={strict_fixed_object_view_ids}, "
@@ -147,8 +147,8 @@ val_dataset = (
     "OV9DCameraPose("
     f"dataset_location='{ov9d_root}', "
     "dset='test1', "
-    f"split_json='/omni-object_clone/splits_multi_4_3000/test1.json', "
-    # f"split_json='/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/splits_multi_4_3000/test1.json', "
+    # f"split_json='/omni-object_clone/splits_multi_4_3000/test1.json', "
+    f"split_json='/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/splits_multi_4_3000/test1.json', "
     "num_object_views=4, "
     f"fixed_object_view_ids={fixed_object_view_ids}, "
     f"strict_fixed_object_view_ids={strict_fixed_object_view_ids}, "

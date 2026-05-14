@@ -1,0 +1,42 @@
+{
+  "scene_source": "single",
+  "seq_name": "oo9d_camera_pose/single/anise_002_rnaesj2fkdqpww1mfihg7nsc9ceg81ww/obj_000002/000000",
+  "scene_name": "anise_002_rnaesj2fkdqpww1mfihg7nsc9ceg81ww",
+  "image_id": 0,
+  "object_id": 2,
+  "object_name": "obj_000002",
+  "scene_rgb_path": "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d/oo3d9dsingle/anise_002_rnaesj2fkdqpww1mfihg7nsc9ceg81ww/rgb/000000.png",
+  "scene_depth_path": "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d/oo3d9dsingle/anise_002_rnaesj2fkdqpww1mfihg7nsc9ceg81ww/depth/000000.png",
+  "scene_mask_path": "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d/oo3d9dsingle/anise_002_rnaesj2fkdqpww1mfihg7nsc9ceg81ww/mask_visib/000000_000000.png",
+  "scene_camera_path": "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d/oo3d9dsingle/anise_002_rnaesj2fkdqpww1mfihg7nsc9ceg81ww/scene_camera.json",
+  "object_cam_indices": [
+    1,
+    5,
+    10,
+    15
+  ],
+  "object_rgb_paths": [
+    "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d_around_image/obj_000002/rgb/000001.png",
+    "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d_around_image/obj_000002/rgb/000005.png",
+    "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d_around_image/obj_000002/rgb/000010.png",
+    "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d_around_image/obj_000002/rgb/000015.png"
+  ],
+  "scene_images_shape": [
+    1,
+    3,
+    476,
+    518
+  ],
+  "scene_depth_shape": [
+    1,
+    476,
+    518,
+    1
+  ],
+  "object_images_shape": [
+    4,
+    3,
+    476,
+    518
+  ]
+}

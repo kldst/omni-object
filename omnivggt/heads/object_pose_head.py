@@ -23,6 +23,7 @@ class ObjectPoseHeadConfig:
     transformer_dim: int = 1024
     ief_iters: int = 1
     init_params_path: Optional[str] = None
+    predict_size: bool = True
 
 
 def _default_init_params_path() -> Optional[str]:
@@ -61,11 +62,13 @@ class ObjectPoseTransformerDecoderHead(nn.Module):
     def __init__(self, *, context_dim: int, cfg: Optional[ObjectPoseHeadConfig] = None):
         super().__init__()
         self.cfg = cfg or ObjectPoseHeadConfig()
+        self.predict_size = bool(self.cfg.predict_size)
 
         init_translate, init_rot6d = _load_global_init_params(self.cfg.init_params_path)
         self.register_buffer("init_translate", torch.from_numpy(init_translate).unsqueeze(0))
         self.register_buffer("init_pose", torch.from_numpy(init_rot6d).unsqueeze(0))
-        self.register_buffer("init_size_log", torch.zeros(1, 3, dtype=torch.float32))
+        if self.predict_size:
+            self.register_buffer("init_size_log", torch.zeros(1, 3, dtype=torch.float32))
 
         self.transformer = TransformerDecoder(
             num_tokens=1,
@@ -83,18 +86,19 @@ class ObjectPoseTransformerDecoderHead(nn.Module):
 
         self.decpose = nn.Linear(self.cfg.transformer_dim, 6)
         self.dectranslate = nn.Linear(self.cfg.transformer_dim, 3)
-        self.decsize = nn.Linear(self.cfg.transformer_dim, 3)
+        self.decsize = nn.Linear(self.cfg.transformer_dim, 3) if self.predict_size else None
         self.presence_branch = nn.Linear(self.cfg.transformer_dim, 1)
         nn.init.xavier_uniform_(self.decpose.weight, gain=0.01)
         nn.init.xavier_uniform_(self.dectranslate.weight, gain=0.01)
-        nn.init.xavier_uniform_(self.decsize.weight, gain=0.01)
+        if self.decsize is not None:
+            nn.init.xavier_uniform_(self.decsize.weight, gain=0.01)
         nn.init.xavier_uniform_(self.presence_branch.weight, gain=0.01)
 
     def forward(self, context_tokens: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         batch_size = context_tokens.shape[0]
         pred_pose = self.init_pose.expand(batch_size, -1)
         pred_translate = self.init_translate.expand(batch_size, -1)
-        pred_size_log = self.init_size_log.expand(batch_size, -1)
+        pred_size_log = self.init_size_log.expand(batch_size, -1) if self.predict_size else None
         presence_logits = None
 
         for _ in range(int(self.cfg.ief_iters)):
@@ -102,7 +106,8 @@ class ObjectPoseTransformerDecoderHead(nn.Module):
             token_out = self.transformer(token, context=context_tokens).squeeze(1)
             pred_pose = self.decpose(token_out) + pred_pose
             pred_translate = self.dectranslate(token_out) + pred_translate
-            pred_size_log = self.decsize(token_out) + pred_size_log
+            if self.decsize is not None:
+                pred_size_log = self.decsize(token_out) + pred_size_log
             presence_logits = self.presence_branch(token_out).squeeze(-1)
 
         return pred_pose, pred_translate, pred_size_log, presence_logits
@@ -116,8 +121,23 @@ class ObjectPoseHead(nn.Module):
         object_pose_cfg: Optional[ObjectPoseHeadConfig] = None,
         context_pool: str = "flatten",
         use_global_scene_object_concat: bool = False,
+        predict_size: bool = True,
     ):
         super().__init__()
+        if object_pose_cfg is not None and object_pose_cfg.predict_size != bool(predict_size):
+            object_pose_cfg = ObjectPoseHeadConfig(
+                transformer_depth=object_pose_cfg.transformer_depth,
+                transformer_heads=object_pose_cfg.transformer_heads,
+                transformer_mlp_dim=object_pose_cfg.transformer_mlp_dim,
+                transformer_dim_head=object_pose_cfg.transformer_dim_head,
+                transformer_dropout=object_pose_cfg.transformer_dropout,
+                transformer_emb_dropout=object_pose_cfg.transformer_emb_dropout,
+                transformer_norm=object_pose_cfg.transformer_norm,
+                transformer_dim=object_pose_cfg.transformer_dim,
+                ief_iters=object_pose_cfg.ief_iters,
+                init_params_path=object_pose_cfg.init_params_path,
+                predict_size=bool(predict_size),
+            )
         self.context_pool = context_pool
         self.use_global_scene_object_concat = bool(use_global_scene_object_concat)
         decoder_context_dim = 2 * dim_in if self.use_global_scene_object_concat else dim_in
@@ -140,12 +160,14 @@ class ObjectPoseHead(nn.Module):
             object_global = object_tokens.mean(dim=(1, 2))
             context_tokens = torch.cat([scene_global, object_global], dim=-1).unsqueeze(1)
             object_pose, object_translation, object_size_log, object_presence_logits = self.decoder(context_tokens)
-            return {
+            outputs = {
                 "object_pose": object_pose,
                 "object_translation": object_translation,
-                "object_size_log": object_size_log,
                 "object_presence_logits": object_presence_logits,
             }
+            if object_size_log is not None:
+                outputs["object_size_log"] = object_size_log
+            return outputs
 
         if self.context_pool == "mean":
             context = patch_tokens.mean(dim=2)
@@ -162,12 +184,14 @@ class ObjectPoseHead(nn.Module):
             context_tokens = torch.cat([object_latent, context_tokens], dim=1)
 
         object_pose, object_translation, object_size_log, object_presence_logits = self.decoder(context_tokens)
-        return {
+        outputs = {
             "object_pose": object_pose,
             "object_translation": object_translation,
-            "object_size_log": object_size_log,
             "object_presence_logits": object_presence_logits,
         }
+        if object_size_log is not None:
+            outputs["object_size_log"] = object_size_log
+        return outputs
 
 
 __all__ = [

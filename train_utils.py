@@ -244,6 +244,7 @@ def load_model(cfg: Any, device: torch.device) -> Tuple[OmniVGGT, torch.dtype]:
         enable_depth=cfg.get("enable_depth", True),
         enable_object_mask=cfg.get("enable_object_mask", False),
         enable_object_srt=cfg.get("enable_object_srt", False),
+        enable_object_size=cfg.get("enable_object_size", True),
         cam_drop_prob=cfg.get("cam_drop_prob", 0.1),
         depth_drop_prob=cfg.get("depth_drop_prob", 0.1),
         always_use_depth_gt=cfg.get("always_use_depth_gt", False),
@@ -520,7 +521,7 @@ def build_loss_criterion(cfg: Any) -> MultitaskLoss:
             "pose_rep": cfg.get("object_srt_pose_rep", "rot6d"),
             "weight_pose": cfg.get("object_srt_weight_pose", 1.0),
             "weight_translation": cfg.get("object_srt_weight_translation", 1.0),
-            "weight_size": cfg.get("object_srt_weight_size", 0.0),
+            "weight_size": cfg.get("object_srt_weight_size", 0.0) if cfg.get("enable_object_size", True) else 0.0,
             "symmetry_info_path": cfg.get("object_srt_symmetry_info_path", ""),
             "symmetry_continuous_steps": cfg.get("object_srt_symmetry_continuous_steps", 72),
         } if cfg.get("enable_object_srt", False) else None,
@@ -542,6 +543,11 @@ def build_loss_criterion(cfg: Any) -> MultitaskLoss:
     logger.info(f"  Point loss weight: {cfg.get('point_loss_weight', 1.0)}")
     if cfg.get("enable_object_srt", False):
         logger.info(f"  Object SRT loss weight: {cfg.get('object_srt_loss_weight', 1.0)}")
+        logger.info(f"  Object size prediction: {cfg.get('enable_object_size', True)}")
+        logger.info(
+            f"  Object size loss weight: "
+            f"{cfg.get('object_srt_weight_size', 0.0) if cfg.get('enable_object_size', True) else 0.0}"
+        )
     if cfg.get("enable_object_mask", False):
         logger.info(f"  Object mask loss weight: {cfg.get('object_mask_loss_weight', 1.0)}")
     if cfg.get("enable_object_presence", cfg.get("enable_object_srt", False)):

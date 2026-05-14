@@ -1,8 +1,8 @@
 import os
 from pathlib import Path
 
-# Must be set before `import gradio` so Gradio's vibe_edit_history / cache
-# files land in a writable location instead of /tmp/gradio.
+# Must be set before `import gradio` so Gradio's cache files land in a writable
+# location instead of /tmp/gradio.
 PROJECT_ROOT = Path(__file__).resolve().parent
 _LOCAL_TMP = PROJECT_ROOT / "tmp"
 _LOCAL_TMP.mkdir(parents=True, exist_ok=True)
@@ -13,16 +13,15 @@ os.environ.setdefault("TMPDIR", str(_LOCAL_TMP))
 os.environ.setdefault("MPLCONFIGDIR", str(_LOCAL_TMP / "matplotlib"))
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-# cd /mnt/train-data-4-hdd/yian/freepose/omni-object
-# python3 demo_gradio_6dpose.py \
-#   --port 7860 \
-#   --train-dataset-root /mnt/train-data-4-hdd/yian/freepose/dataset/0421_randon_4000scene_30pose
+# cd /mnt/train-data-4-hdd/yian/freepose/omni-object_clone
+# python3 demo_gradio_6dpose.py --port 7860
 
 import argparse
 import inspect
+import json
 import re
 import runpy
-import warnings
+import time
 from typing import Dict, List, Sequence, Tuple
 
 import cv2
@@ -34,27 +33,32 @@ from PIL import Image
 from safetensors.torch import load_file as load_safetensors_file
 
 from omnivggt.datasets.base.base_stereo_view_dataset import BaseStereoViewDataset
-from omnivggt.datasets.utils.misc import threshold_depth_map
+from omnivggt.loss import _load_symmetry_info
 from omnivggt.models.omnivggt import OmniVGGT
 from omnivggt.utils.image import ImgNorm
 
-# python3 demo_gradio_6dpose.py --port 7860
-DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "train.py"
-DEFAULT_DATASET_ROOT = Path(
-    "/mnt/train-data-4-hdd/yian/freepose/dataset/0504_4000scene_30pose_test"
-)
-DEFAULT_OBJECT_RENDER_ROOT = Path(
-    "/mnt/train-data-4-hdd/yian/freepose/object_space_renders_all"
-)
-DEFAULT_OBJ_ROOT = Path("/mnt/train-data-4-hdd/yian/freepose/obj")
-DEFAULT_PRETRAIN_MODEL = Path(
-    "/mnt/train-data-4-hdd/yian/freepose/omni-object/outputs/"
-    "0422_omnivggt_4000multiscene/model.safetensors"
-)
-PREDICTION_ROTATION_FIX = np.diag([1.0, 1.0, -1.0]).astype(np.float32)
 
-PRED_AXIS_COLORS = ((255, 64, 64), (0, 255, 255), (255, 215, 0))
-GT_AXIS_COLORS = ((255, 80, 200), (180, 255, 180), (200, 0, 255))
+# ============================================================
+# Constants
+# ============================================================
+DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "train_ov9d_camera_pose.py"
+DEFAULT_DATASET_ROOT = Path("/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d")
+DEFAULT_PRETRAIN_MODEL = Path(
+    "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/outputs/0511/12000/model.safetensors"
+)
+DEFAULT_MATCHING_CASES_ROOT = PROJECT_ROOT / "outputs" / "0511" / "12000" / "metric" / "matching_cases"
+
+AXIS_COLORS = ((255, 64, 64), (0, 255, 255), (255, 215, 0))
+PRED_AXIS_COLORS = AXIS_COLORS
+GT_AXIS_COLORS = AXIS_COLORS
+PRED_BBOX_COLOR = (0, 255, 0)
+GT_BBOX_COLOR = (255, 160, 0)
+BBOX_EDGES = (
+    (0, 1), (1, 3), (3, 2), (2, 0),
+    (4, 5), (5, 7), (7, 6), (6, 4),
+    (0, 4), (1, 5), (2, 6), (3, 7),
+)
+
 _GRADIO_IMAGE_PARAMS = inspect.signature(gr.Image.__init__).parameters
 
 
@@ -69,6 +73,9 @@ def compat_image(**kwargs):
     return gr.Image(**kwargs)
 
 
+# ============================================================
+# Config & model loading
+# ============================================================
 def load_config(config_path: Path) -> Dict:
     cfg = runpy.run_path(str(config_path))
     return {key: value for key, value in cfg.items() if not key.startswith("__")}
@@ -79,22 +86,31 @@ def parse_dataset_ctor_arg(dataset_expr: str, arg_name: str, default=None):
     match = re.search(pattern, dataset_expr)
     if not match:
         return default
-    value_str = match.group(1).strip()
     try:
-        return eval(value_str, {"__builtins__": {}}, {})
+        return eval(match.group(1).strip(), {"__builtins__": {}}, {})
     except Exception:
         return default
 
 
 def resolve_runtime_settings(cfg: Dict) -> Dict:
-    dataset_expr = str(cfg.get("train_dataset", ""))
+    dataset_expr = str(cfg.get("val_dataset", cfg.get("train_dataset", "")))
+    train_dataset_expr = str(cfg.get("train_dataset", ""))
     object_input_views = tuple(
-        parse_dataset_ctor_arg(dataset_expr, "object_input_views", default=(1, 5, 10, 15))
+        parse_dataset_ctor_arg(
+            dataset_expr,
+            "object_input_views",
+            default=parse_dataset_ctor_arg(dataset_expr, "fixed_object_view_ids", default=(1, 5, 10, 15)),
+        )
     )
     resolution = tuple(int(v) for v in cfg.get("resolution", (518, 518)))
     return {
         "object_input_views": tuple(int(v) for v in object_input_views),
         "resolution": resolution,
+        "dataset_location": parse_dataset_ctor_arg(dataset_expr, "dataset_location", default=None),
+        "split_json": parse_dataset_ctor_arg(dataset_expr, "split_json", default=None),
+        "dset": parse_dataset_ctor_arg(dataset_expr, "dset", default="test1"),
+        "train_split_json": parse_dataset_ctor_arg(train_dataset_expr, "split_json", default=None),
+        "train_dset": parse_dataset_ctor_arg(train_dataset_expr, "dset", default="train"),
     }
 
 
@@ -134,7 +150,11 @@ def build_model_from_config(cfg: Dict, checkpoint_path: Path, device: torch.devi
         enable_camera=cfg.get("enable_camera", True),
         enable_point=cfg.get("enable_point", True),
         enable_depth=cfg.get("enable_depth", True),
+        enable_object_mask=cfg.get("enable_object_mask", False),
         enable_object_srt=cfg.get("enable_object_srt", False),
+        always_use_depth_gt=cfg.get("always_use_depth_gt", False),
+        patch_embed_pretrained_path=cfg.get("patch_embed_pretrained_path", None),
+        load_patch_embed_from_hub=cfg.get("load_patch_embed_from_hub", True),
         cam_drop_prob=cfg.get("cam_drop_prob", 0.1),
         depth_drop_prob=cfg.get("depth_drop_prob", 0.1),
         object_pose_context_pool=cfg.get("object_pose_context_pool", "flatten"),
@@ -169,148 +189,9 @@ def build_model_from_config(cfg: Dict, checkpoint_path: Path, device: torch.devi
     return model
 
 
-def decode_name(value) -> str:
-    return value.decode("utf-8") if isinstance(value, bytes) else str(value)
-
-
-def google_object_core_name(name: str) -> str | None:
-    name = str(name)
-    prefixes = ("google_", "Assets_obj_google_")
-    suffix = "_meshes_model"
-    for prefix in prefixes:
-        if name.startswith(prefix) and name.endswith(suffix):
-            return name[len(prefix):-len(suffix)]
-    return None
-
-
-def candidate_object_dir_names(object_name: str) -> List[str]:
-    object_name = str(object_name)
-    candidates = [object_name]
-    if object_name.startswith("freepose_obj_"):
-        remainder = object_name[len("freepose_obj_"):]
-        candidates.append(remainder.replace("_obj_", "__obj_"))
-    core = google_object_core_name(object_name)
-    if core is not None:
-        candidates.append(f"google__{core}__meshes")
-    return list(dict.fromkeys(candidates))
-
-
-def resolve_object_render_dir(object_render_root: Path, object_name: str) -> Path:
-    for candidate in candidate_object_dir_names(object_name):
-        path = object_render_root / candidate
-        if path.is_dir():
-            return path
-    raise FileNotFoundError(f"Unable to resolve object render directory for {object_name}")
-
-
-def object_image_filename(view_idx: int) -> str:
-    return "Main_Camera_rgb.png" if int(view_idx) == 0 else f"Main_Camera_({int(view_idx)})_rgb.png"
-
-
-def object_image_paths(
-    object_render_root: Path,
-    object_name: str,
-    object_views: Sequence[int],
-) -> List[Path]:
-    object_dir = resolve_object_render_dir(object_render_root, object_name)
-    paths = [object_dir / object_image_filename(v) for v in object_views]
-    missing = [str(p) for p in paths if not p.is_file()]
-    if missing:
-        raise FileNotFoundError(f"Missing object render images for {object_name}: {missing}")
-    return paths
-
-
-def scale_for_object_name(name: str) -> float:
-    if "ycbv" in name:
-        return 0.002
-    if "handal" in name:
-        return 0.0015
-    if "hope" in name:
-        return 0.003
-    if "rupac" in name:
-        return 0.002
-    if "google" in name:
-        return 0.2
-    return 1.0
-
-
-def mesh_path_for_object_name(name: str, obj_root: Path) -> Path:
-    search_roots = [Path(obj_root)]
-    if obj_root.name == "google":
-        search_roots.append(obj_root.parent)
-    elif obj_root.name in {"obj", "data"}:
-        sibling = obj_root.parent / ("data" if obj_root.name == "obj" else "obj")
-        if sibling not in search_roots:
-            search_roots.append(sibling)
-
-    folder = google_object_core_name(name)
-    if folder is not None:
-        for root in search_roots:
-            candidates = [
-                root / "google" / folder / "meshes" / "model.obj",
-                root / folder / "meshes" / "model.obj" if root.name == "google" else None,
-            ]
-            for path in candidates:
-                if path is not None and path.is_file():
-                    return path
-
-    prefix_to_dir = {
-        "freepose_obj_ycbv_": "ycbv",
-        "freepose_obj_handal_": "handal",
-        "freepose_obj_hope_": "hope",
-        "freepose_obj_rupac_": "rupac",
-    }
-    for prefix, directory in prefix_to_dir.items():
-        if name.startswith(prefix):
-            obj_name = name[len(prefix):]
-            for root in search_roots:
-                for suffix in (".obj", ".ply"):
-                    path = root / directory / f"{obj_name}{suffix}"
-                    if path.is_file():
-                        return path
-
-    raise FileNotFoundError(f"Could not resolve mesh for object name: {name}")
-
-
-def load_mesh_vertices(mesh_path: Path) -> np.ndarray:
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=RuntimeWarning)
-        mesh = trimesh.load(mesh_path, process=False, maintain_order=True)
-    if isinstance(mesh, trimesh.Scene):
-        mesh = mesh.dump(concatenate=True)
-    vertices = np.asarray(mesh.vertices, dtype=np.float32)
-    if vertices.ndim != 2 or vertices.shape[1] != 3 or len(vertices) == 0:
-        raise ValueError(f"Failed to load vertices from {mesh_path}")
-    return vertices
-
-
-def axis_length_for_object(object_name: str, obj_root: Path) -> float:
-    try:
-        vertices = load_mesh_vertices(mesh_path_for_object_name(object_name, obj_root))
-        vertices = vertices * float(scale_for_object_name(object_name))
-        extent = vertices.max(axis=0) - vertices.min(axis=0)
-        return max(float(np.linalg.norm(extent)) * 0.25, 1e-3)
-    except Exception as exc:
-        print(f"[demo] axis_length_for_object fallback for {object_name}: {exc}")
-        return 0.1
-
-
-def quat_wxyz_to_matrix(quat: np.ndarray) -> np.ndarray:
-    q = np.asarray(quat, dtype=np.float64)
-    norm = np.linalg.norm(q)
-    if norm < 1e-12:
-        return np.eye(3, dtype=np.float64)
-    w, x, y, z = q / norm
-    return np.array(
-        [
-            [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
-            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
-            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
-        ],
-        dtype=np.float64,
-    )
-
-
+# ============================================================
+# Pose math
+# ============================================================
 def rot6d_to_matrix(rot6d: np.ndarray) -> np.ndarray:
     rot6d = np.asarray(rot6d, dtype=np.float64).reshape(3, 2)
     x_raw = rot6d[:, 0]
@@ -342,165 +223,193 @@ def translation_error(pred_t: np.ndarray, gt_t: np.ndarray) -> Dict[str, List[fl
     }
 
 
-def list_scenes(dataset_root: Path) -> List[str]:
-    if not dataset_root.is_dir():
-        return []
-    return sorted(p.name for p in dataset_root.iterdir() if p.is_dir() and p.name.startswith("scene_"))
+def symmetric_rotation_error_degrees(
+    pred_rot: np.ndarray,
+    gt_rot: np.ndarray,
+    object_id: int,
+    symmetry_info_path: str,
+    continuous_steps: int,
+) -> Tuple[float, int]:
+    if not symmetry_info_path:
+        return rotation_error_degrees(pred_rot, gt_rot), 1
+    symmetry_info = _load_symmetry_info(str(symmetry_info_path), int(continuous_steps))
+    sym_rots = symmetry_info.get(int(object_id))
+    if sym_rots is None:
+        return rotation_error_degrees(pred_rot, gt_rot), 1
+    candidates = sym_rots.detach().cpu().numpy().astype(np.float64)
+    errors = [rotation_error_degrees(pred_rot, np.asarray(gt_rot, dtype=np.float64) @ sym) for sym in candidates]
+    return float(min(errors)), len(errors)
 
 
-def list_frames_for_scene(dataset_root: Path, scene_name: str) -> List[str]:
-    image_root = dataset_root / scene_name / "out_image"
-    cam_root = dataset_root / scene_name / "out_cam_param"
-    if not image_root.is_dir():
-        return []
-    frames = []
-    for path in sorted(image_root.iterdir()):
-        if not path.is_dir() or not path.name.startswith("frame_"):
-            continue
-        if not (path / "camera.jpg").is_file():
-            continue
-        if not (cam_root / path.name / "camera_camera.npz").is_file():
-            continue
-        frames.append(path.name)
-    return frames
+# ============================================================
+# OV9D file IO helpers
+# ============================================================
+def read_json(path: Path):
+    with Path(path).open("r", encoding="utf-8") as handle:
+        return json.load(handle)
 
 
-def image_path_for_frame(dataset_root: Path, scene_name: str, frame_name: str) -> Path:
-    path = dataset_root / scene_name / "out_image" / frame_name / "camera.jpg"
-    if not path.is_file():
-        raise FileNotFoundError(f"Missing scene image: {path}")
-    return path
+def ov9d_object_key(object_id: int) -> str:
+    return f"obj_{int(object_id):06d}"
 
 
-def depth_path_for_frame(dataset_root: Path, scene_name: str, frame_name: str) -> Path:
-    path = dataset_root / scene_name / "out_depth" / frame_name / "camera_depth.png"
-    if not path.is_file():
-        raise FileNotFoundError(f"Missing scene depth: {path}")
-    return path
+def ov9d_object_id_from_key(value) -> int:
+    match = re.search(r"(\d+)$", str(value))
+    if not match:
+        raise ValueError(f"Could not parse OV9D object id from: {value}")
+    return int(match.group(1))
 
 
-def cam_param_path_for_frame(dataset_root: Path, scene_name: str, frame_name: str) -> Path:
-    path = dataset_root / scene_name / "out_cam_param" / frame_name / "camera_camera.npz"
-    if not path.is_file():
-        raise FileNotFoundError(f"Missing camera param file: {path}")
-    return path
+def ov9d_object_display_name(object_id: int, oid_to_name: Dict[int, str]) -> str:
+    object_id = int(object_id)
+    return f"{ov9d_object_key(object_id)} · {oid_to_name.get(object_id, 'unknown')}"
 
 
-def load_camera_params(dataset_root: Path, scene_name: str, frame_name: str) -> Tuple[
-    np.ndarray, np.ndarray, np.ndarray, int, int
-]:
-    data = np.load(cam_param_path_for_frame(dataset_root, scene_name, frame_name))
-    intrinsic = np.asarray(data["intrinsics.K_flat9"], dtype=np.float32).reshape(3, 3)
-    world_to_camera = np.asarray(data["extrinsics.opencv.worldToCamera16"], dtype=np.float32).reshape(4, 4)
-    camera_to_world = np.asarray(data["extrinsics.opencv.cameraToWorld16"], dtype=np.float32).reshape(4, 4)
-    width = int(np.asarray(data["image.width"]).reshape(-1)[0])
-    height = int(np.asarray(data["image.height"]).reshape(-1)[0])
-    return intrinsic, world_to_camera, camera_to_world, width, height
-
-
-def load_scene_pose_lookup(dataset_root: Path, scene_name: str) -> Dict[str, Dict[str, np.ndarray]]:
-    pose_path = dataset_root / scene_name / "out_pose" / "poses.npz"
-    data = np.load(pose_path, allow_pickle=False)
-    names = [decode_name(name) for name in data["names"]]
-    positions = data["positions"].astype(np.float32)
-    quats = data["rot_quat_wxyz"].astype(np.float32)
-    return {
-        name: {"translation_world": positions[i], "quat_wxyz": quats[i]}
-        for i, name in enumerate(names)
-    }
-
-
-def list_objects_for_scene(dataset_root: Path, scene_name: str) -> List[str]:
+def format_optional_float(value, digits: int = 3) -> str:
+    if value is None:
+        return "N/A"
     try:
-        return sorted(load_scene_pose_lookup(dataset_root, scene_name).keys())
-    except FileNotFoundError:
-        return []
+        value = float(value)
+    except (TypeError, ValueError):
+        return "N/A"
+    if not np.isfinite(value):
+        return "N/A"
+    return f"{value:.{digits}f}"
 
 
+def safe_metric_filename(metric_name: str) -> str:
+    return (
+        str(metric_name).replace("°", "deg")
+        .replace("@", "at")
+        .replace(" ", "_")
+        .replace("/", "_")
+        .replace("cm", "cm")
+    )
+
+
+def ov9d_read_depth_m(depth_path: Path, camera_entry: Dict) -> np.ndarray:
+    depth_raw = np.asarray(Image.open(depth_path), dtype=np.float32)
+    depth_m = depth_raw * float(camera_entry.get("depth_scale", 1.0)) / 1000.0
+    depth_m[~np.isfinite(depth_m)] = 0.0
+    depth_m[depth_m < 0.0] = 0.0
+    return depth_m.astype(np.float32)
+
+
+def ov9d_read_binary_mask(mask_path: Path) -> np.ndarray:
+    return (np.asarray(Image.open(mask_path).convert("L"), dtype=np.uint8) > 0).astype(np.float32)
+
+
+# ============================================================
+# OV9D tensor loaders (scene frame + object reference views)
+# ============================================================
 class DemoScenePreprocessor(BaseStereoViewDataset):
     def __init__(self, resolution):
         super().__init__(dset="demo", resolution=resolution, transform=ImgNorm, seed=0)
 
 
-def load_rgb_as_tensor(image_path: Path, resolution: Sequence[int], device: torch.device) -> torch.Tensor:
-    image = Image.open(image_path).convert("RGB")
-    width, height = int(resolution[0]), int(resolution[1])
-    image = image.resize((width, height), getattr(Image, "Resampling", Image).LANCZOS)
-    array = np.asarray(image, dtype=np.float32) / 255.0
-    tensor = torch.from_numpy(np.ascontiguousarray(array)).permute(2, 0, 1)
-    return tensor.to(device)
+def crop_resize_image_depth_mask(
+    processor: DemoScenePreprocessor,
+    image: Image.Image,
+    depthmap: np.ndarray,
+    object_mask: np.ndarray | None,
+    intrinsics: np.ndarray,
+    resolution,
+    info: str,
+):
+    if object_mask is None:
+        image, depthmap, intrinsics = processor._crop_resize_if_necessary(
+            image=image,
+            depthmap=depthmap,
+            intrinsics=intrinsics.copy(),
+            resolution=resolution,
+            rng=np.random.default_rng(seed=0),
+            info=info,
+        )
+        return image, depthmap, None, intrinsics
+
+    # Use the OV9D mask-aware crop/resize so GT masks stay aligned to input pixels.
+    from importlib import import_module
+    ov9d_cls = import_module("omnivggt.datasets.6Dpose.ov9d_camera_pose").OV9DCameraPose
+    return ov9d_cls._crop_resize_if_necessary_with_mask(
+        processor,
+        image=image,
+        depthmap=depthmap,
+        object_mask=object_mask,
+        intrinsics=intrinsics.copy(),
+        resolution=resolution,
+        rng=np.random.default_rng(seed=0),
+        info=info,
+    )
 
 
-def load_object_tensor(
-    object_render_root: Path,
-    object_name: str,
+def load_ov9d_object_tensor(
+    single_records_by_object_id: Dict[int, List[Dict]],
+    object_id: int,
     object_views: Sequence[int],
     resolution,
     device,
-) -> torch.Tensor:
-    images = [
-        load_rgb_as_tensor(p, resolution, device)
-        for p in object_image_paths(object_render_root, object_name, object_views)
-    ]
-    return torch.stack(images, dim=0).unsqueeze(0)
+) -> Tuple[torch.Tensor, List[Tuple[np.ndarray, str]]]:
+    object_id = int(object_id)
+    if object_id not in single_records_by_object_id:
+        raise FileNotFoundError(f"No OV9D single-object reference renders for object id {object_id}")
+    single_rec = single_records_by_object_id[object_id][0]
+    processor = DemoScenePreprocessor(resolution=resolution)
+    resampling = getattr(Image, "Resampling", Image)
+    tensors: List[torch.Tensor] = []
+    gallery: List[Tuple[np.ndarray, str]] = []
+    for image_id in object_views:
+        image_path = single_rec["scene_dir"] / "rgb" / f"{int(image_id):06d}.png"
+        mask_path = single_rec["scene_dir"] / "mask_visib" / f"{int(image_id):06d}_000000.png"
+        if not image_path.is_file() or not mask_path.is_file():
+            raise FileNotFoundError(f"Missing OV9D object reference view: {image_path} / {mask_path}")
+        rgb_arr = np.asarray(Image.open(image_path).convert("RGB"), dtype=np.uint8)
+        mask_arr = np.asarray(Image.open(mask_path).convert("L"), dtype=np.uint8)
+        white_bg = np.full_like(rgb_arr, 255)
+        white_bg[mask_arr > 0] = rgb_arr[mask_arr > 0]
+        image = Image.fromarray(white_bg, mode="RGB").resize(tuple(resolution), resampling.LANCZOS)
+        tensors.append(processor.transform(image).to(device))
+        gallery.append((np.asarray(image), f"Object view {int(image_id)}"))
+    return torch.stack(tensors, dim=0).unsqueeze(0), gallery
 
 
-def load_scene_frame_inputs(
-    dataset_root: Path,
+def load_ov9d_scene_frame_inputs(
+    multi_root: Path,
     scene_name: str,
-    frame_name: str,
+    image_id: int,
+    object_id: int,
     resolution,
     device,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    image_path = image_path_for_frame(dataset_root, scene_name, frame_name)
-    depth_path = depth_path_for_frame(dataset_root, scene_name, frame_name)
-
-    image = Image.open(image_path).convert("RGB")
-    depth_raw = cv2.imread(str(depth_path), cv2.IMREAD_UNCHANGED)
-    if depth_raw is None:
-        raise FileNotFoundError(f"Failed to read depth image: {depth_path}")
-    if depth_raw.dtype != np.uint16:
-        raise ValueError(f"Expected uint16 R16 depth image, got {depth_raw.dtype} for {depth_path}")
-
-    depthmap = depth_raw.view(np.float16).astype(np.float32)
-    depthmap[~np.isfinite(depthmap)] = 0.0
-    depthmap[depthmap < 0] = 0.0
-    depthmap = threshold_depth_map(depthmap, max_percentile=99, min_percentile=-1)
-
-    intrinsics = (
-        np.load(cam_param_path_for_frame(dataset_root, scene_name, frame_name))["intrinsics.K_flat9"]
-        .astype(np.float32)
-        .reshape(3, 3)
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray]:
+    scene_dir = Path(multi_root) / scene_name
+    camera_entry = read_json(scene_dir / "scene_camera.json")[str(image_id)]
+    gts = read_json(scene_dir / "scene_gt.json")[str(image_id)]
+    object_index = next(
+        (idx for idx, gt in enumerate(gts) if int(gt.get("obj_id", -1)) == int(object_id)),
+        None,
     )
+
+    image = Image.open(scene_dir / "rgb" / f"{image_id:06d}.png").convert("RGB")
+    depthmap = ov9d_read_depth_m(scene_dir / "depth" / f"{image_id:06d}.png", camera_entry)
+    intrinsics = np.asarray(camera_entry["cam_K"], dtype=np.float32).reshape(3, 3)
+    object_mask = None
+    if object_index is not None:
+        mask_path = scene_dir / "mask_visib" / f"{image_id:06d}_{object_index:06d}.png"
+        object_mask = ov9d_read_binary_mask(mask_path)
+
     processor = DemoScenePreprocessor(resolution=resolution)
-    rng = np.random.default_rng(seed=0)
-    image, depthmap, _ = processor._crop_resize_if_necessary(
-        image=image,
-        depthmap=depthmap,
-        intrinsics=intrinsics,
-        resolution=resolution,
-        rng=rng,
-        info=str(image_path),
+    image, depthmap, gt_mask, intrinsics = crop_resize_image_depth_mask(
+        processor, image, depthmap, object_mask, intrinsics, resolution,
+        info=str(scene_dir / "rgb" / f"{image_id:06d}.png"),
     )
     image_tensor = processor.transform(image).unsqueeze(0).unsqueeze(0).to(device)
     depth_tensor = torch.from_numpy(np.ascontiguousarray(depthmap.astype(np.float32)))[None, None, :, :, None].to(device)
     mask_tensor = torch.from_numpy((depthmap > 0).astype(np.float32))[None, None, :, :].to(device)
-    return image_tensor, depth_tensor, mask_tensor
+    return image_tensor, depth_tensor, mask_tensor, np.asarray(image.convert("RGB")), depthmap, gt_mask, intrinsics
 
 
-def load_depth_map_for_visualization(dataset_root: Path, scene_name: str, frame_name: str) -> np.ndarray:
-    depth_path = depth_path_for_frame(dataset_root, scene_name, frame_name)
-    depth_raw = cv2.imread(str(depth_path), cv2.IMREAD_UNCHANGED)
-    if depth_raw is None:
-        raise FileNotFoundError(f"Failed to read depth image: {depth_path}")
-    if depth_raw.dtype != np.uint16:
-        raise ValueError(f"Expected uint16 R16 depth image, got {depth_raw.dtype} for {depth_path}")
-    depthmap = depth_raw.view(np.float16).astype(np.float32)
-    depthmap[~np.isfinite(depthmap)] = 0.0
-    depthmap[depthmap < 0] = 0.0
-    return threshold_depth_map(depthmap, max_percentile=99, min_percentile=-1)
-
-
+# ============================================================
+# 2D visualization helpers (axes / bbox / mask overlays)
+# ============================================================
 def project_camera_points(points_cam: np.ndarray, intrinsic: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     z = points_cam[:, 2]
     valid = z > 1e-6
@@ -511,24 +420,8 @@ def project_camera_points(points_cam: np.ndarray, intrinsic: np.ndarray) -> Tupl
     return uv, valid
 
 
-def draw_axes_overlay(
-    image_path: Path,
-    intrinsic: np.ndarray,
-    rotation_cam: np.ndarray,
-    translation_cam: np.ndarray,
-    axis_length: float,
-    width: int,
-    height: int,
-    axis_colors: Sequence[Tuple[int, int, int]],
-) -> np.ndarray:
-    image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
-    if image is None:
-        raise FileNotFoundError(f"Unable to read image: {image_path}")
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    if image.shape[1] != width or image.shape[0] != height:
-        image = cv2.resize(image, (width, height), interpolation=cv2.INTER_LINEAR)
-
-    pts_obj = np.asarray(
+def _axis_object_points(axis_length: float) -> np.ndarray:
+    return np.asarray(
         [
             [0.0, 0.0, 0.0],
             [axis_length, 0.0, 0.0],
@@ -537,10 +430,208 @@ def draw_axes_overlay(
         ],
         dtype=np.float32,
     )
-    pts_cam = pts_obj @ rotation_cam.T + translation_cam[None, :]
+
+
+def centered_axis_bbox_corners(size_xyz: np.ndarray) -> np.ndarray:
+    size = np.asarray(size_xyz, dtype=np.float32).reshape(3)
+    half = size * 0.5
+    xs = [-half[0], half[0]]
+    ys = [-half[1], half[1]]
+    zs = [-half[2], half[2]]
+    return np.array([[x, y, z] for z in zs for y in ys for x in xs], dtype=np.float32)
+
+
+def transform_bbox_corners(size_xyz: np.ndarray, rotation: np.ndarray, translation: np.ndarray) -> np.ndarray | None:
+    size = np.asarray(size_xyz, dtype=np.float64).reshape(3)
+    if not np.all(np.isfinite(size)) or np.any(size <= 0.0):
+        return None
+    rotation = np.asarray(rotation, dtype=np.float64).reshape(3, 3)
+    translation = np.asarray(translation, dtype=np.float64).reshape(3)
+    return centered_axis_bbox_corners(size) @ rotation.T + translation[None, :]
+
+
+def box_volume(size_xyz: np.ndarray) -> float:
+    size = np.asarray(size_xyz, dtype=np.float64).reshape(3)
+    if not np.all(np.isfinite(size)) or np.any(size <= 0.0):
+        return 0.0
+    return float(np.prod(size))
+
+
+def point_inside_obb(
+    point: np.ndarray,
+    center: np.ndarray,
+    rotation: np.ndarray,
+    half_size: np.ndarray,
+    eps: float = 1e-8,
+) -> bool:
+    local = np.asarray(rotation, dtype=np.float64).T @ (np.asarray(point, dtype=np.float64) - center)
+    return bool(np.all(np.abs(local) <= half_size + eps))
+
+
+def unique_points(points: List[np.ndarray], decimals: int = 9) -> np.ndarray:
+    if not points:
+        return np.empty((0, 3), dtype=np.float64)
+    rounded = np.round(np.asarray(points, dtype=np.float64), decimals=decimals)
+    _, keep = np.unique(rounded, axis=0, return_index=True)
+    return np.asarray(points, dtype=np.float64)[np.sort(keep)]
+
+
+def segment_plane_intersections(
+    p0: np.ndarray,
+    p1: np.ndarray,
+    center: np.ndarray,
+    rotation: np.ndarray,
+    half_size: np.ndarray,
+):
+    direction = p1 - p0
+    for axis_idx in range(3):
+        axis = rotation[:, axis_idx]
+        for signed_half in (-half_size[axis_idx], half_size[axis_idx]):
+            d0 = float(np.dot(p0 - center, axis) - signed_half)
+            d1 = float(np.dot(p1 - center, axis) - signed_half)
+            denom = d0 - d1
+            if abs(denom) < 1e-12:
+                continue
+            alpha = d0 / denom
+            if -1e-8 <= alpha <= 1.0 + 1e-8:
+                yield p0 + np.clip(alpha, 0.0, 1.0) * direction
+
+
+def intersection_volume_obb(
+    pred_size: np.ndarray,
+    pred_rotation: np.ndarray,
+    pred_translation: np.ndarray,
+    gt_size: np.ndarray,
+    gt_rotation: np.ndarray,
+    gt_translation: np.ndarray,
+) -> float:
+    pred_size = np.asarray(pred_size, dtype=np.float64).reshape(3)
+    gt_size = np.asarray(gt_size, dtype=np.float64).reshape(3)
+    pred_rotation = np.asarray(pred_rotation, dtype=np.float64).reshape(3, 3)
+    gt_rotation = np.asarray(gt_rotation, dtype=np.float64).reshape(3, 3)
+    pred_translation = np.asarray(pred_translation, dtype=np.float64).reshape(3)
+    gt_translation = np.asarray(gt_translation, dtype=np.float64).reshape(3)
+    pred_corners = transform_bbox_corners(pred_size, pred_rotation, pred_translation)
+    gt_corners = transform_bbox_corners(gt_size, gt_rotation, gt_translation)
+    if pred_corners is None or gt_corners is None:
+        return 0.0
+
+    pred_half = pred_size * 0.5
+    gt_half = gt_size * 0.5
+    points: List[np.ndarray] = []
+
+    for point in pred_corners:
+        if point_inside_obb(point, gt_translation, gt_rotation, gt_half):
+            points.append(point)
+    for point in gt_corners:
+        if point_inside_obb(point, pred_translation, pred_rotation, pred_half):
+            points.append(point)
+
+    for start_idx, end_idx in BBOX_EDGES:
+        p0, p1 = pred_corners[start_idx], pred_corners[end_idx]
+        for point in segment_plane_intersections(p0, p1, gt_translation, gt_rotation, gt_half):
+            if point_inside_obb(point, pred_translation, pred_rotation, pred_half) and point_inside_obb(
+                point, gt_translation, gt_rotation, gt_half
+            ):
+                points.append(point)
+        p0, p1 = gt_corners[start_idx], gt_corners[end_idx]
+        for point in segment_plane_intersections(p0, p1, pred_translation, pred_rotation, pred_half):
+            if point_inside_obb(point, pred_translation, pred_rotation, pred_half) and point_inside_obb(
+                point, gt_translation, gt_rotation, gt_half
+            ):
+                points.append(point)
+
+    hull_points = unique_points(points)
+    if len(hull_points) < 4:
+        return 0.0
+    try:
+        from scipy.spatial import ConvexHull
+    except ImportError:
+        return 0.0
+    try:
+        hull = ConvexHull(hull_points)
+        return float(max(hull.volume, 0.0))
+    except Exception:
+        return 0.0
+
+
+def bbox_iou_3d(
+    pred_size: np.ndarray | None,
+    pred_rotation: np.ndarray,
+    pred_translation: np.ndarray,
+    gt_size: np.ndarray | None,
+    gt_rotation: np.ndarray,
+    gt_translation: np.ndarray,
+) -> float | None:
+    details = bbox_iou_3d_details(
+        pred_size,
+        pred_rotation,
+        pred_translation,
+        gt_size,
+        gt_rotation,
+        gt_translation,
+    )
+    return None if details is None else float(details["iou"])
+
+
+def bbox_iou_3d_details(
+    pred_size: np.ndarray | None,
+    pred_rotation: np.ndarray,
+    pred_translation: np.ndarray,
+    gt_size: np.ndarray | None,
+    gt_rotation: np.ndarray,
+    gt_translation: np.ndarray,
+) -> Dict[str, float] | None:
+    if pred_size is None or gt_size is None:
+        return None
+    pred_volume = box_volume(pred_size)
+    gt_volume = box_volume(gt_size)
+    if pred_volume <= 0.0 or gt_volume <= 0.0:
+        return None
+    inter_volume = intersection_volume_obb(
+        pred_size,
+        pred_rotation,
+        pred_translation,
+        gt_size,
+        gt_rotation,
+        gt_translation,
+    )
+    union = pred_volume + gt_volume - inter_volume
+    if union <= 0.0:
+        return None
+    return {
+        "iou": float(np.clip(inter_volume / union, 0.0, 1.0)),
+        "intersection_volume": float(inter_volume),
+        "union_volume": float(union),
+        "pred_volume": float(pred_volume),
+        "gt_volume": float(gt_volume),
+    }
+
+
+def clamp_predicted_size_for_bbox(pred_size: np.ndarray, gt_size: np.ndarray) -> Tuple[np.ndarray, bool]:
+    pred = np.asarray(pred_size, dtype=np.float32).reshape(3)
+    gt = np.asarray(gt_size, dtype=np.float32).reshape(3)
+    finite = np.isfinite(pred) & (pred > 0)
+    safe = np.where(finite, pred, gt)
+    lower = np.maximum(gt * 0.10, 0.005)
+    upper = np.maximum(gt * 4.00, lower + 1e-6)
+    clipped = np.clip(safe, lower, upper).astype(np.float32)
+    changed = bool(not np.allclose(clipped, pred, rtol=1e-4, atol=1e-6))
+    return clipped, changed
+
+
+def draw_axes_overlay_on_image(
+    image_rgb: np.ndarray,
+    intrinsic: np.ndarray,
+    rotation_cam: np.ndarray,
+    translation_cam: np.ndarray,
+    axis_length: float,
+    axis_colors: Sequence[Tuple[int, int, int]],
+) -> np.ndarray:
+    pts_cam = _axis_object_points(axis_length) @ rotation_cam.T + translation_cam[None, :]
     uv, valid = project_camera_points(pts_cam, intrinsic)
 
-    overlay = image.copy()
+    overlay = np.asarray(image_rgb, dtype=np.uint8).copy()
     if not bool(valid[0]):
         return overlay
     center = tuple(np.round(uv[0]).astype(np.int32))
@@ -553,41 +644,76 @@ def draw_axes_overlay(
     return overlay
 
 
-def build_axes_gallery(
-    dataset_root: Path,
-    scene_name: str,
-    frame_name: str,
+def draw_bbox_axes_overlay_on_image(
+    image_rgb: np.ndarray,
+    intrinsic: np.ndarray,
     rotation_cam: np.ndarray,
     translation_cam: np.ndarray,
+    bbox_obj: np.ndarray,
     axis_length: float,
-    label: str,
     axis_colors: Sequence[Tuple[int, int, int]],
-) -> List[Tuple[np.ndarray, str]]:
-    intrinsic, _, _, width, height = load_camera_params(dataset_root, scene_name, frame_name)
-    image_path = image_path_for_frame(dataset_root, scene_name, frame_name)
-    overlay = draw_axes_overlay(
-        image_path, intrinsic, rotation_cam, translation_cam, axis_length, width, height, axis_colors,
-    )
-    return [(overlay, f"{label} ({frame_name})")]
-
-
-def pose_axis_points_camera_frame(
-    rotation_cam: np.ndarray,
-    translation_cam: np.ndarray,
-    axis_length: float,
+    bbox_color: Tuple[int, int, int],
 ) -> np.ndarray:
-    pts_obj = np.asarray(
-        [
-            [0.0, 0.0, 0.0],
-            [axis_length, 0.0, 0.0],
-            [0.0, axis_length, 0.0],
-            [0.0, 0.0, axis_length],
-        ],
-        dtype=np.float32,
+    overlay = draw_axes_overlay_on_image(
+        image_rgb, intrinsic, rotation_cam, translation_cam, axis_length, axis_colors,
     )
-    return pts_obj @ rotation_cam.T + translation_cam[None, :]
+    bbox_cam = np.asarray(bbox_obj, dtype=np.float32) @ rotation_cam.T + translation_cam[None, :]
+    uv, valid = project_camera_points(bbox_cam, intrinsic)
+    height, width = overlay.shape[:2]
+    rect = (0, 0, int(width), int(height))
+    for start_idx, end_idx in BBOX_EDGES:
+        if not (valid[start_idx] and valid[end_idx]):
+            continue
+        p1 = tuple(np.round(uv[start_idx]).astype(np.int32))
+        p2 = tuple(np.round(uv[end_idx]).astype(np.int32))
+        ok, cp1, cp2 = cv2.clipLine(rect, p1, p2)
+        if ok:
+            cv2.line(overlay, cp1, cp2, bbox_color, 2, lineType=cv2.LINE_AA)
+    return overlay
 
 
+def mask_overlay_image(
+    image_rgb: np.ndarray,
+    mask: np.ndarray | None,
+    color: Tuple[int, int, int] = (255, 64, 64),
+    threshold: float = 0.5,
+) -> np.ndarray | None:
+    if mask is None:
+        return None
+    base = np.asarray(image_rgb, dtype=np.uint8).copy()
+    mask_arr = np.asarray(mask, dtype=np.float32)
+    if mask_arr.ndim == 3:
+        mask_arr = mask_arr.squeeze()
+    if mask_arr.shape[:2] != base.shape[:2]:
+        mask_arr = cv2.resize(mask_arr, (base.shape[1], base.shape[0]), interpolation=cv2.INTER_LINEAR)
+    alpha = np.clip(mask_arr, 0.0, 1.0)
+    hard = alpha >= float(threshold)
+    tint = np.asarray(color, dtype=np.float32)
+    out = base.astype(np.float32)
+    out[hard] = out[hard] * 0.45 + tint * 0.55
+    heat = cv2.applyColorMap(np.uint8(np.clip(alpha, 0, 1) * 255), cv2.COLORMAP_TURBO)
+    heat = cv2.cvtColor(heat, cv2.COLOR_BGR2RGB).astype(np.float32)
+    soft = (alpha > 0.05) & ~hard
+    out[soft] = out[soft] * 0.70 + heat[soft] * 0.30
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
+def mask_iou(pred_mask: np.ndarray | None, gt_mask: np.ndarray | None, threshold: float = 0.5) -> float | None:
+    if pred_mask is None or gt_mask is None:
+        return None
+    pred = np.asarray(pred_mask) >= float(threshold)
+    gt = np.asarray(gt_mask).astype(bool)
+    if pred.shape != gt.shape:
+        pred = cv2.resize(pred.astype(np.uint8), (gt.shape[1], gt.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
+    union = np.logical_or(pred, gt).sum()
+    if union == 0:
+        return 1.0
+    return float(np.logical_and(pred, gt).sum() / union)
+
+
+# ============================================================
+# 3D point cloud + pose export (.glb for the Gradio Model3D viewer)
+# ============================================================
 def depth_to_camera_points(
     depthmap: np.ndarray,
     intrinsic: np.ndarray,
@@ -627,142 +753,101 @@ def depth_to_camera_points(
     return points, colors
 
 
-def export_point_cloud_pose_glb(
-    dataset_root: Path,
+def export_ov9d_point_cloud_pose_glb(
     scene_name: str,
     frame_name: str,
-    pred_rotation_cam: np.ndarray,
-    pred_translation_cam: np.ndarray,
-    gt_rotation_cam: np.ndarray,
-    gt_translation_cam: np.ndarray,
-    axis_length: float,
+    rgb_image: np.ndarray,
+    depthmap: np.ndarray,
+    intrinsic: np.ndarray,
+    pred_rotation_cam: np.ndarray | None = None,
+    pred_translation_cam: np.ndarray | None = None,
+    pred_bbox_obj: np.ndarray | None = None,
+    gt_rotation_cam: np.ndarray | None = None,
+    gt_translation_cam: np.ndarray | None = None,
+    gt_bbox_obj: np.ndarray | None = None,
+    axis_length: float = 0.1,
     point_cloud_stride: int = 2,
 ) -> str:
-    intrinsic, _, _, _, _ = load_camera_params(dataset_root, scene_name, frame_name)
-    depthmap = load_depth_map_for_visualization(dataset_root, scene_name, frame_name)
-    rgb_image = np.asarray(Image.open(image_path_for_frame(dataset_root, scene_name, frame_name)).convert("RGB"))
     stride = max(1, int(point_cloud_stride))
     max_points = 80000 if stride <= 2 else 50000
     points, colors = depth_to_camera_points(depthmap, intrinsic, rgb_image, stride=stride, max_points=max_points)
+
     safe_scene = re.sub(r"[^a-zA-Z0-9_]+", "_", scene_name)[:120]
-    safe_frame = re.sub(r"[^a-zA-Z0-9_]+", "_", frame_name)[:120]
-    out_dir = _LOCAL_TMP / "point_cloud_pose_glb" / safe_scene
+    safe_frame = re.sub(r"[^a-zA-Z0-9_]+", "_", str(frame_name))[:120]
+    out_dir = _LOCAL_TMP / "ov9d_point_cloud_pose_glb" / safe_scene
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{safe_frame}_stride{stride}.glb"
+    stamp = int(time.time_ns())
+    out_path = out_dir / f"{safe_frame}_stride{stride}_{stamp}.glb"
 
     scene_3d = trimesh.Scene()
     if len(points):
-        point_cloud = trimesh.PointCloud(vertices=points, colors=colors if colors is not None else None)
-        scene_3d.add_geometry(point_cloud)
+        scene_3d.add_geometry(trimesh.PointCloud(vertices=points, colors=colors))
 
     viewer_axis_length = float(axis_length) * 1.8
-    axis_radius = max(viewer_axis_length * 0.08, 2.5e-4)
-    center_radius = axis_radius * 2.4
-    tip_radius = axis_radius * 1.5
+    radius = max(viewer_axis_length * 0.025, 2.0e-4)
 
-    def add_pose_axes(rotation_cam, translation_cam, axis_colors):
-        pts = pose_axis_points_camera_frame(rotation_cam, translation_cam, viewer_axis_length)
-        center = pts[0]
-        center_mesh = trimesh.creation.icosphere(radius=center_radius, subdivisions=1)
-        center_mesh.apply_translation(center)
-        center_mesh.visual.face_colors = np.tile(np.array([[255, 255, 255, 255]], dtype=np.uint8), (len(center_mesh.faces), 1))
-        scene_3d.add_geometry(center_mesh)
-        for idx, color in enumerate(axis_colors):
-            axis_mesh = trimesh.creation.cylinder(
-                radius=axis_radius,
-                segment=np.stack([center, pts[idx + 1]], axis=0),
-            )
-            rgba = np.array([[color[0], color[1], color[2], 255]], dtype=np.uint8)
-            axis_mesh.visual.face_colors = np.tile(rgba, (len(axis_mesh.faces), 1))
-            scene_3d.add_geometry(axis_mesh)
-            tip_mesh = trimesh.creation.icosphere(radius=tip_radius, subdivisions=1)
-            tip_mesh.apply_translation(pts[idx + 1])
-            tip_mesh.visual.face_colors = np.tile(rgba, (len(tip_mesh.faces), 1))
-            scene_3d.add_geometry(tip_mesh)
+    def add_segment(start: np.ndarray, end: np.ndarray, color: Tuple[int, int, int]):
+        start = np.asarray(start, dtype=np.float32)
+        end = np.asarray(end, dtype=np.float32)
+        if float(np.linalg.norm(end - start)) < 1e-8:
+            return
+        mesh = trimesh.creation.cylinder(radius=radius, segment=np.stack([start, end], axis=0))
+        rgba = np.array([[color[0], color[1], color[2], 255]], dtype=np.uint8)
+        mesh.visual.face_colors = np.tile(rgba, (len(mesh.faces), 1))
+        scene_3d.add_geometry(mesh)
 
-    add_pose_axes(pred_rotation_cam, pred_translation_cam, PRED_AXIS_COLORS)
-    add_pose_axes(gt_rotation_cam, gt_translation_cam, GT_AXIS_COLORS)
+    def add_pose(rotation_cam, translation_cam, bbox_obj, bbox_color, axis_colors):
+        center = np.asarray(translation_cam, dtype=np.float32)
+        axis_pts = _axis_object_points(viewer_axis_length) @ rotation_cam.T + translation_cam[None, :]
+        for idx, axis_color in enumerate(axis_colors):
+            add_segment(center, axis_pts[idx + 1], axis_color)
+        if bbox_obj is not None:
+            bbox_cam = np.asarray(bbox_obj, dtype=np.float32) @ rotation_cam.T + translation_cam[None, :]
+            for start_idx, end_idx in BBOX_EDGES:
+                add_segment(bbox_cam[start_idx], bbox_cam[end_idx], bbox_color)
+
+    if pred_rotation_cam is not None and pred_translation_cam is not None:
+        add_pose(pred_rotation_cam, pred_translation_cam, pred_bbox_obj, PRED_BBOX_COLOR, PRED_AXIS_COLORS)
+    if gt_rotation_cam is not None and gt_translation_cam is not None:
+        add_pose(gt_rotation_cam, gt_translation_cam, gt_bbox_obj, GT_BBOX_COLOR, GT_AXIS_COLORS)
+
     scene_3d.export(out_path)
     return str(out_path)
 
 
-def format_pose_markdown(
-    *,
-    scene_name: str,
-    frame_name: str,
-    object_name: str,
-    checkpoint_path: Path,
-    pred_translation_cam: np.ndarray,
-    pred_rotation_cam: np.ndarray,
-    pred_translation_world: np.ndarray,
-    pred_rotation_world: np.ndarray,
-    gt_translation_cam: np.ndarray,
-    gt_rotation_cam: np.ndarray,
-    gt_translation_world: np.ndarray,
-    gt_rotation_world: np.ndarray,
-    use_depth_input: bool,
-) -> str:
-    rot_error_deg = rotation_error_degrees(pred_rotation_cam, gt_rotation_cam)
-    trans_error = translation_error(pred_translation_cam, gt_translation_cam)
-    return "\n".join(
-        [
-            "### Prediction Summary",
-            f"- checkpoint: `{checkpoint_path}`",
-            f"- scene: `{scene_name}`",
-            f"- frame: `{frame_name}`",
-            f"- object: `{object_name}`",
-            f"- use depth input: `{use_depth_input}`",
-            "",
-            "### Predicted Pose",
-            f"- camera-frame translation: `{np.round(pred_translation_cam, 6).tolist()}`",
-            f"- camera-frame rotation matrix: `{np.round(pred_rotation_cam, 6).tolist()}`",
-            f"- world translation: `{np.round(pred_translation_world, 6).tolist()}`",
-            f"- world rotation matrix: `{np.round(pred_rotation_world, 6).tolist()}`",
-            "",
-            "### Ground Truth (camera frame from out_cam_param)",
-            f"- camera-frame translation: `{np.round(gt_translation_cam, 6).tolist()}`",
-            f"- camera-frame rotation matrix: `{np.round(gt_rotation_cam, 6).tolist()}`",
-            f"- world translation: `{np.round(gt_translation_world, 6).tolist()}`",
-            f"- world rotation matrix: `{np.round(gt_rotation_world, 6).tolist()}`",
-            "",
-            "### Errors (camera frame, pred vs GT)",
-            f"- translation L2: `{trans_error['l2']:.6f}`",
-            f"- translation abs xyz: `{np.round(trans_error['abs_xyz'], 6).tolist()}`",
-            f"- translation signed xyz: `{np.round(trans_error['signed_xyz'], 6).tolist()}`",
-            f"- rotation error (deg): `{rot_error_deg:.6f}`",
-        ]
-    )
-
-
-SEEN_MARKER = "🔴 "
-
-
+# ============================================================
+# DemoApp: OV9D metadata, choices, and inference
+# ============================================================
 class DemoApp:
     def __init__(
         self,
         config_path: Path,
         checkpoint_path: str | None,
         dataset_root: Path,
-        object_render_root: Path,
-        obj_root: Path,
-        train_dataset_root: Path | None = None,
+        train_split_json: Path | None = None,
         use_gt_pose_for_prediction: bool = False,
     ):
         self.cfg = load_config(config_path)
         self.runtime = resolve_runtime_settings(self.cfg)
-        self.dataset_root = Path(dataset_root)
-        self.object_render_root = Path(object_render_root)
-        self.obj_root = Path(obj_root)
-        self.train_dataset_root = Path(train_dataset_root) if train_dataset_root else None
+        runtime_dataset_root = self.runtime.get("dataset_location")
+        self.dataset_root = Path(runtime_dataset_root) if runtime_dataset_root else Path(dataset_root)
         self.object_views = tuple(int(v) for v in self.runtime["object_input_views"])
         self.resolution = tuple(int(v) for v in self.runtime["resolution"])
         self.use_gt_pose_for_prediction = bool(use_gt_pose_for_prediction)
 
-        self.scene_choices = list_scenes(self.dataset_root)
-        if not self.scene_choices:
-            raise RuntimeError(f"No scenes found under {self.dataset_root}")
+        self.ov9d_multi_root = self.dataset_root / "oo3d9dmulti"
+        self.ov9d_single_root = self.dataset_root / "oo3d9dsingle"
+        self.ov9d_split_json = Path(self.runtime["split_json"]) if self.runtime.get("split_json") else None
+        self.ov9d_train_split_json = (
+            Path(train_split_json)
+            if train_split_json is not None
+            else Path(self.runtime["train_split_json"]) if self.runtime.get("train_split_json") else None
+        )
 
-        self.seen_objects = self._scan_train_objects()
+        self._init_ov9d_metadata()
+        self.scene_choices = self.get_scene_choices(self.default_split_name)
+        if not self.scene_choices:
+            raise RuntimeError(f"No OV9D scenes found under {self.ov9d_multi_root}")
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.checkpoint_path = resolve_checkpoint_path(self.cfg, checkpoint_path)
@@ -770,31 +855,311 @@ class DemoApp:
         self.available_checkpoints = self.discover_checkpoints()
         self.load_checkpoint(self.checkpoint_path)
 
-    def _scan_train_objects(self) -> set:
-        if self.train_dataset_root is None:
-            return set()
-        if not self.train_dataset_root.is_dir():
-            print(f"[demo] train_dataset_root not found: {self.train_dataset_root}; annotation disabled.")
-            return set()
-        objs: set = set()
-        for scene in self.train_dataset_root.iterdir():
-            if not scene.is_dir() or not scene.name.startswith("scene_"):
-                continue
-            try:
-                objs |= set(load_scene_pose_lookup(self.train_dataset_root, scene.name).keys())
-            except FileNotFoundError:
-                continue
-        print(f"[demo] loaded {len(objs)} train objects from {self.train_dataset_root}")
-        return objs
+    # ----- OV9D metadata -----
+    def _init_ov9d_metadata(self):
+        if self.ov9d_split_json is None or not self.ov9d_split_json.is_file():
+            raise FileNotFoundError(f"OV9D split JSON not found: {self.ov9d_split_json}")
 
-    def decorate_object_choices(self, names) -> list:
-        if not self.seen_objects:
-            return [(n, n) for n in names]
-        return [
-            ((SEEN_MARKER + n) if n in self.seen_objects else n, n)
-            for n in names
-        ]
+        self.ov9d_models_info = read_json(self.dataset_root / "models_info.json")
+        self.ov9d_name_to_oid = {str(k): int(v) for k, v in read_json(self.dataset_root / "name2oid.json").items()}
+        self.ov9d_oid_to_name = {oid: name for name, oid in self.ov9d_name_to_oid.items()}
 
+        self.ov9d_split_records = {"eval": self._load_ov9d_split_records(self.ov9d_split_json)}
+        if self.ov9d_train_split_json is not None and self.ov9d_train_split_json.is_file():
+            self.ov9d_split_records["train"] = self._load_ov9d_split_records(self.ov9d_train_split_json)
+        elif self.ov9d_train_split_json is not None:
+            print(f"[demo] OV9D train split not found: {self.ov9d_train_split_json}")
+
+        self.default_split_name = "eval"
+        self.ov9d_all_scene_records: Dict[str, Dict] = {}
+        for records in self.ov9d_split_records.values():
+            self.ov9d_all_scene_records.update(records)
+
+        self.ov9d_single_records_by_object_id = self._build_ov9d_single_records_by_object_id()
+        self.ov9d_train_object_ids = self._collect_ov9d_train_object_ids()
+        self._init_metric_case_browser()
+
+        print(
+            f"[demo] OV9D metadata: eval_scenes={len(self.ov9d_split_records.get('eval', {}))} "
+            f"train_scenes={len(self.ov9d_split_records.get('train', {}))} "
+            f"train_objects={len(self.ov9d_train_object_ids)} "
+            f"single_objects={len(self.ov9d_single_records_by_object_id)} "
+            f"eval_split={self.ov9d_split_json} train_split={self.ov9d_train_split_json}"
+        )
+
+    def _load_ov9d_split_records(self, split_json: Path) -> Dict[str, Dict]:
+        payload = read_json(split_json)
+        return {
+            str(item["scene_name"]): item
+            for item in payload.get("scenes", [])
+            if (self.ov9d_multi_root / str(item["scene_name"])).is_dir()
+        }
+
+    def _collect_ov9d_train_object_ids(self) -> set:
+        if self.ov9d_train_split_json is None or not self.ov9d_train_split_json.is_file():
+            return set()
+        payload = read_json(self.ov9d_train_split_json)
+        object_ids = {int(x) for x in payload.get("anchor_object_ids", [])}
+        return {oid for oid in object_ids if oid in self.ov9d_single_records_by_object_id}
+
+    def _build_ov9d_single_records_by_object_id(self) -> Dict[int, List[Dict]]:
+        records: Dict[int, List[Dict]] = {}
+        if not self.ov9d_single_root.is_dir():
+            return records
+        for scene_dir in sorted(p for p in self.ov9d_single_root.iterdir() if p.is_dir()):
+            name_parts = scene_dir.name.split("_")
+            object_instance = "_".join(name_parts[:-1]) if len(name_parts) > 2 else scene_dir.name
+            object_id = self.ov9d_name_to_oid.get(object_instance)
+            if object_id is None:
+                continue
+            image_ids = []
+            for rgb_path in sorted((scene_dir / "rgb").glob("*.png")):
+                image_id = int(rgb_path.stem)
+                if (scene_dir / "mask_visib" / f"{image_id:06d}_000000.png").is_file():
+                    image_ids.append(image_id)
+            if all(view_id in image_ids for view_id in self.object_views):
+                records.setdefault(int(object_id), []).append(
+                    {
+                        "scene_dir": scene_dir,
+                        "scene_name": scene_dir.name,
+                        "image_ids": image_ids,
+                        "object_instance": object_instance,
+                    }
+                )
+        return records
+
+    # ----- Per-object size / axis-length helpers -----
+    def _ov9d_size(self, object_id: int) -> np.ndarray:
+        info = self.ov9d_models_info.get(str(int(object_id)), {})
+        return np.asarray(
+            [info.get("size_x", 100.0), info.get("size_y", 100.0), info.get("size_z", 100.0)],
+            dtype=np.float32,
+        ) / 1000.0
+
+    def _ov9d_axis_length(self, object_id: int) -> float:
+        return max(float(np.linalg.norm(self._ov9d_size(object_id))) * 0.25, 1e-3)
+
+    # ----- Metric case browser -----
+    def _init_metric_case_browser(self):
+        self.metric_case_root = DEFAULT_MATCHING_CASES_ROOT
+        self.metric_case_index: Dict[str, Dict] = {}
+        self.metric_case_cache: Dict[Tuple[str, str], List[Dict]] = {}
+        if not self.metric_case_root.is_dir():
+            return
+        if (self.metric_case_root / "case_browser_index.json").is_file() or (self.metric_case_root / "summary.json").is_file():
+            split_dirs = [self.metric_case_root]
+            self.metric_case_root = self.metric_case_root.parent
+        else:
+            split_dirs = sorted(p for p in self.metric_case_root.iterdir() if p.is_dir())
+        for split_dir in split_dirs:
+            index_path = split_dir / "case_browser_index.json"
+            if not index_path.is_file():
+                summary_path = split_dir / "summary.json"
+                if not summary_path.is_file():
+                    continue
+                summary = read_json(summary_path)
+                metrics = {}
+                for metric_name, matched_count in summary.items():
+                    legacy_file = f"{safe_metric_filename(metric_name)}.jsonl"
+                    if not (split_dir / legacy_file).is_file():
+                        continue
+                    metrics[str(metric_name)] = {
+                        "matched": int(matched_count),
+                        "missed": 0,
+                        "total": int(matched_count),
+                        "case_file": legacy_file,
+                        "case_kind": "relative" if str(metric_name).startswith("Rel ") else "absolute",
+                    }
+                if metrics:
+                    self.metric_case_index[str(split_dir.name)] = metrics
+                continue
+            payload = read_json(index_path)
+            self.metric_case_index[str(split_dir.name)] = payload.get("metrics", {})
+
+    @property
+    def metric_case_split_choices(self) -> List[str]:
+        return sorted(self.metric_case_index)
+
+    def get_metric_case_metric_choices(self, split_name: str) -> List[Tuple[str, str]]:
+        metrics = self.metric_case_index.get(split_name, {})
+        choices = []
+        for metric in sorted(metrics, key=lambda item: (item.startswith("Rel "), item)):
+            meta = metrics[metric]
+            label = f"{metric} | matched {int(meta.get('matched', 0))} | missed {int(meta.get('missed', 0))}"
+            choices.append((label, metric))
+        return choices
+
+    def get_metric_case_status_choices(self, split_name: str, metric_name: str) -> List[Tuple[str, str]]:
+        meta = self.metric_case_index.get(split_name, {}).get(metric_name, {})
+        choices = []
+        matched_count = int(meta.get("matched", 0))
+        missed_count = int(meta.get("missed", 0))
+        if matched_count > 0:
+            choices.append((f"達成 ({matched_count})", "matched"))
+        if missed_count > 0:
+            choices.append((f"沒達成 ({missed_count})", "missed"))
+        if not choices:
+            choices.append(("沒有案例", "matched"))
+        return choices
+
+    def _load_metric_cases(self, split_name: str, metric_name: str) -> List[Dict]:
+        cache_key = (str(split_name), str(metric_name))
+        if cache_key in self.metric_case_cache:
+            return self.metric_case_cache[cache_key]
+        meta = self.metric_case_index.get(split_name, {}).get(metric_name, {})
+        case_file = meta.get("case_file")
+        if not case_file:
+            self.metric_case_cache[cache_key] = []
+            return []
+        path = self.metric_case_root / split_name / str(case_file)
+        cases = []
+        if path.is_file():
+            with path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if line:
+                        case = json.loads(line)
+                        case.setdefault("metric", metric_name)
+                        case.setdefault("case_kind", "relative" if str(metric_name).startswith("Rel ") else "absolute")
+                        case.setdefault("matched", True)
+                        case.setdefault("status", "matched" if bool(case.get("matched")) else "missed")
+                        if "case_id" not in case:
+                            if str(case.get("case_kind")) == "relative":
+                                case["case_id"] = f"rel:{case.get('left_sample_index', -1)}:{case.get('right_sample_index', -1)}"
+                            else:
+                                case["case_id"] = f"abs:{case.get('sample_index', -1)}"
+                        cases.append(case)
+        self.metric_case_cache[cache_key] = cases
+        return cases
+
+    def get_metric_case_entries(self, split_name: str, metric_name: str, status: str) -> List[Dict]:
+        want_matched = str(status) == "matched"
+        return [case for case in self._load_metric_cases(split_name, metric_name) if bool(case.get("matched")) == want_matched]
+
+    def _metric_case_label(self, case: Dict) -> str:
+        object_name = str(case.get("object_name", ov9d_object_key(case.get("object_id", -1))))
+        scene_name = str(case.get("scene_name", ""))
+        if str(case.get("case_kind")) == "relative":
+            return (
+                f"{scene_name} | {object_name} | "
+                f"{case.get('left_frame_name', '------')} -> {case.get('right_frame_name', '------')} | "
+                f"r={format_optional_float(case.get('relative_rotation_error_deg'), 2)} deg | "
+                f"t={format_optional_float(case.get('relative_translation_error_cm'), 2)} cm"
+            )
+        return (
+            f"{scene_name} | {object_name} | frame {case.get('frame_name', '------')} | "
+            f"IoU={format_optional_float(case.get('iou_3d'), 3)} | "
+            f"r={format_optional_float(case.get('rotation_error_deg'), 2)} deg | "
+            f"t={format_optional_float(case.get('translation_error_cm'), 2)} cm"
+        )
+
+    def get_metric_case_dropdown_choices(self, split_name: str, metric_name: str, status: str) -> List[Tuple[str, str]]:
+        return [(self._metric_case_label(case), str(case.get("case_id"))) for case in self.get_metric_case_entries(split_name, metric_name, status)]
+
+    def find_metric_case(self, split_name: str, metric_name: str, status: str, case_id: str | None) -> Dict | None:
+        for case in self.get_metric_case_entries(split_name, metric_name, status):
+            if str(case.get("case_id")) == str(case_id):
+                return case
+        return None
+
+    def metric_case_selection_to_target(
+        self,
+        split_name: str,
+        metric_name: str,
+        status: str,
+        case_id: str | None,
+    ) -> Tuple[str | None, str | None, str | None, str | None, str]:
+        case = self.find_metric_case(split_name, metric_name, status, case_id)
+        if case is None:
+            return split_name, None, None, None, "### Metric Case Browser\n- 沒有可用案例。"
+        scene_name = str(case.get("scene_name", ""))
+        object_key = ov9d_object_key(int(case.get("object_id", -1)))
+        if str(case.get("case_kind")) == "relative":
+            frame_name = str(case.get("left_frame_name", ""))
+            details = [
+                "### Metric Case Browser",
+                f"- metric: `{metric_name}`",
+                f"- status: `{status}`",
+                f"- scene: `{scene_name}`",
+                f"- object: `{object_key}`",
+                f"- frames: `{case.get('left_frame_name')}` -> `{case.get('right_frame_name')}`",
+                f"- relative rotation error (deg): `{format_optional_float(case.get('relative_rotation_error_deg'), 6)}`",
+                f"- relative translation error (cm): `{format_optional_float(case.get('relative_translation_error_cm'), 6)}`",
+                "- note: relative metrics 會自動跳到 left frame。",
+            ]
+        else:
+            frame_name = str(case.get("frame_name", ""))
+            details = [
+                "### Metric Case Browser",
+                f"- metric: `{metric_name}`",
+                f"- status: `{status}`",
+                f"- scene: `{scene_name}`",
+                f"- object: `{object_key}`",
+                f"- frame: `{frame_name}`",
+                f"- 3D IoU: `{format_optional_float(case.get('iou_3d'), 6)}`",
+                f"- rotation error (deg): `{format_optional_float(case.get('rotation_error_deg'), 6)}`",
+                f"- translation error (cm): `{format_optional_float(case.get('translation_error_cm'), 6)}`",
+            ]
+        return split_name, scene_name, frame_name, object_key, "\n".join(details)
+
+    # ----- Dropdown choices -----
+    @property
+    def ov9d_split_choices(self) -> List[str]:
+        return list(self.ov9d_split_records.keys())
+
+    def get_scene_choices(self, split_name: str | None = None) -> List[str]:
+        split = split_name if split_name in self.ov9d_split_records else self.default_split_name
+        return sorted(self.ov9d_split_records.get(split, {}))
+
+    def get_frame_choices(self, scene_name: str) -> List[str]:
+        scene_dir = self.ov9d_multi_root / scene_name
+        if not (scene_dir / "scene_gt.json").is_file():
+            return []
+        return [f"{int(x):06d}" for x in sorted(int(k) for k in read_json(scene_dir / "scene_gt.json").keys())]
+
+    def _ov9d_scene_object_ids(self, scene_name: str) -> List[int]:
+        item = self.ov9d_all_scene_records.get(scene_name, {})
+        ids = [int(x) for x in item.get("object_ids", item.get("eligible_object_ids", []))]
+        return [oid for oid in ids if oid in self.ov9d_single_records_by_object_id]
+
+    def _ov9d_present_ids_for_frame(self, scene_name: str, frame_name: str) -> List[int]:
+        scene_gt = read_json(self.ov9d_multi_root / scene_name / "scene_gt.json")
+        return [int(gt.get("obj_id", -1)) for gt in scene_gt[str(int(frame_name))]]
+
+    def _ov9d_absent_object_ids(self, scene_name: str, frame_name: str, count: int = 6) -> List[int]:
+        present = set(self._ov9d_present_ids_for_frame(scene_name, frame_name))
+        scene_ids = set(self._ov9d_scene_object_ids(scene_name))
+        candidates = sorted(
+            oid
+            for oid in self.ov9d_single_records_by_object_id
+            if oid not in present and oid not in scene_ids
+        )
+        rng = np.random.default_rng(abs(hash((scene_name, str(frame_name)))) % (2**32))
+        if len(candidates) > count:
+            candidates = [int(x) for x in rng.choice(np.asarray(candidates, dtype=np.int64), size=count, replace=False)]
+            candidates.sort()
+        return candidates
+
+    def ov9d_object_choices_for_frame(self, scene_name: str, frame_name: str):
+        if not scene_name or not frame_name:
+            return []
+        present = set(self._ov9d_present_ids_for_frame(scene_name, frame_name))
+        scene_ids = self._ov9d_scene_object_ids(scene_name)
+        absent_ids = self._ov9d_absent_object_ids(scene_name, frame_name)
+
+        def make_label(oid: int, tag: str) -> str:
+            anchor_marker = "🔴 " if oid in self.ov9d_train_object_ids else ""
+            return f"{anchor_marker}[{tag}] {ov9d_object_display_name(oid, self.ov9d_oid_to_name)}"
+
+        choices = []
+        for oid in scene_ids:
+            tag = "present" if oid in present else "scene object, not this frame"
+            choices.append((make_label(oid, tag), ov9d_object_key(oid)))
+        for oid in absent_ids:
+            choices.append((make_label(oid, "absent random"), ov9d_object_key(oid)))
+        return choices
+
+    # ----- Checkpoint discovery / loading -----
     def discover_checkpoints(self) -> List[str]:
         candidates = set()
         if DEFAULT_PRETRAIN_MODEL.is_file():
@@ -820,23 +1185,18 @@ class DemoApp:
             str(self.checkpoint_path),
         )
 
-    def get_frame_choices(self, scene_name: str) -> List[str]:
-        return list_frames_for_scene(self.dataset_root, scene_name) if scene_name else []
-
-    def get_object_choices(self, scene_name: str) -> List[str]:
-        return list_objects_for_scene(self.dataset_root, scene_name) if scene_name else []
-
+    # ----- Input gallery preview (shown before clicking Run) -----
     def input_gallery(self, scene_name: str, frame_name: str, object_name: str):
-        scene_image = str(image_path_for_frame(self.dataset_root, scene_name, frame_name))
-        object_gallery = []
-        try:
-            paths = object_image_paths(self.object_render_root, object_name, self.object_views)
-            for view, path in zip(self.object_views, paths):
-                object_gallery.append((str(path), f"Object view {view}"))
-        except FileNotFoundError as exc:
-            print(f"[demo] {exc}")
+        image_id = int(frame_name)
+        object_id = ov9d_object_id_from_key(object_name)
+        scene_image = str(self.ov9d_multi_root / scene_name / "rgb" / f"{image_id:06d}.png")
+        _, object_gallery = load_ov9d_object_tensor(
+            self.ov9d_single_records_by_object_id, object_id,
+            self.object_views, self.resolution, torch.device("cpu"),
+        )
         return scene_image, object_gallery
 
+    # ----- Inference + visualization -----
     def run_inference(
         self,
         scene_name: str,
@@ -846,20 +1206,35 @@ class DemoApp:
         show_point_cloud_pose: bool,
         point_cloud_stride: int,
     ):
-        pose_lookup = load_scene_pose_lookup(self.dataset_root, scene_name)
-        if object_name not in pose_lookup:
-            raise ValueError(f"Object {object_name} not found in {scene_name}/out_pose/poses.npz")
+        object_id = ov9d_object_id_from_key(object_name)
+        image_id = int(frame_name)
         use_depth_input = bool(use_depth_input)
+        scene_dir = self.ov9d_multi_root / scene_name
 
-        scene_tensor, depth_tensor, mask_tensor = load_scene_frame_inputs(
-            self.dataset_root, scene_name, frame_name, self.resolution, self.device,
+        # ---- GT lookup for this (scene, frame, object) ----
+        gts = read_json(scene_dir / "scene_gt.json")[str(image_id)]
+        object_index = next(
+            (idx for idx, gt in enumerate(gts) if int(gt.get("obj_id", -1)) == int(object_id)),
+            None,
         )
-        object_tensor = load_object_tensor(
-            self.object_render_root, object_name, self.object_views, self.resolution, self.device,
+        has_object = object_index is not None
+
+        # ---- Inputs ----
+        (scene_tensor, depth_tensor, mask_tensor,
+         display_image, display_depth, gt_mask, intrinsic) = load_ov9d_scene_frame_inputs(
+            self.ov9d_multi_root, scene_name, image_id, object_id, self.resolution, self.device,
+        )
+        object_tensor, _ = load_ov9d_object_tensor(
+            self.ov9d_single_records_by_object_id, object_id,
+            self.object_views, self.resolution, self.device,
         )
 
+        # ---- Model forward ----
         with torch.inference_mode():
-            with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.device.type == "cuda"):
+            with torch.autocast(
+                device_type=self.device.type, dtype=torch.bfloat16,
+                enabled=self.device.type == "cuda",
+            ):
                 outputs = self.model.inference(
                     images=scene_tensor,
                     object_images=object_tensor,
@@ -870,83 +1245,202 @@ class DemoApp:
                     camera_gt_index=[],
                     depth_gt_index=[0] if use_depth_input else [],
                 )
+        if "object_presence_logits" not in outputs:
+            raise RuntimeError(f"Model output does not contain object_presence_logits: {sorted(outputs.keys())}")
+
+        # ---- Presence + auxiliary outputs (mask, size) ----
+        presence_logit = float(outputs["object_presence_logits"].reshape(-1)[0].detach().float().cpu())
+        presence_prob = float(torch.sigmoid(torch.tensor(presence_logit)).item())
+        pred_present = presence_prob >= 0.5
+
+        pred_mask = None
+        pred_mask_image = None
+        if "object_mask" in outputs:
+            pred_mask = outputs["object_mask"][0, 0].detach().float().cpu().numpy()
+            pred_mask_image = mask_overlay_image(display_image, pred_mask, color=(255, 64, 64))
+        gt_mask_image = (
+            mask_overlay_image(display_image, gt_mask, color=(80, 255, 120))
+            if gt_mask is not None else None
+        )
+        pred_size = None
+        if "object_size" in outputs:
+            pred_size = outputs["object_size"].reshape(-1, 3)[0].detach().float().cpu().numpy().astype(np.float32)
+        elif "object_size_log" in outputs:
+            pred_size = np.exp(
+                outputs["object_size_log"].reshape(-1, 3)[0].detach().float().cpu().numpy()
+            ).astype(np.float32)
+
+        pose_lines = [
+            "### Prediction Summary",
+            f"- checkpoint: `{self.checkpoint_path}`",
+            f"- scene: `{scene_name}`",
+            f"- frame: `{image_id:06d}`",
+            f"- object: `{ov9d_object_display_name(object_id, self.ov9d_oid_to_name)}`",
+            f"- GT presence in this frame: `{bool(has_object)}`",
+            f"- predicted presence probability: `{presence_prob:.6f}` (logit `{presence_logit:.6f}`)",
+            f"- predicted present @0.5: `{bool(pred_present)}`",
+            f"- use depth input: `{use_depth_input}`",
+        ]
+
+        # ---- Absent object: presence-only output ----
+        if not has_object:
+            point_cloud_glb = None
+            if show_point_cloud_pose:
+                point_cloud_glb = export_ov9d_point_cloud_pose_glb(
+                    scene_name, f"{image_id:06d}", display_image, display_depth, intrinsic,
+                    axis_length=self._ov9d_axis_length(object_id),
+                    point_cloud_stride=point_cloud_stride,
+                )
+            pose_lines += [
+                "",
+                "### Presence-Only Result",
+                "- This object is not annotated in the selected frame, so rotation, translation, and mask metrics are skipped.",
+            ]
+            return "\n".join(pose_lines), None, None, point_cloud_glb, pred_mask_image, gt_mask_image
+
+        # ---- Present object: decode pose ----
         if "object_pose" not in outputs or "object_translation" not in outputs:
             raise RuntimeError(f"Model output does not contain object pose keys: {sorted(outputs.keys())}")
 
         pred_rot6d_cam = outputs["object_pose"][0].detach().float().cpu().numpy()
         pred_translation_cam = outputs["object_translation"][0].detach().float().cpu().numpy().astype(np.float32)
-        pred_rotation_cam = (rot6d_to_matrix(pred_rot6d_cam) @ PREDICTION_ROTATION_FIX).astype(np.float32)
+        pred_rotation_cam = rot6d_to_matrix(pred_rot6d_cam).astype(np.float32)
 
-        intrinsic, world_to_cam, cam_to_world, width, height = load_camera_params(
-            self.dataset_root, scene_name, frame_name,
-        )
-        pred_rotation_world = (cam_to_world[:3, :3] @ pred_rotation_cam).astype(np.float32)
-        pred_translation_world = (cam_to_world[:3, :3] @ pred_translation_cam + cam_to_world[:3, 3]).astype(np.float32)
-
-        gt_translation_world = pose_lookup[object_name]["translation_world"].astype(np.float32)
-        gt_rotation_world = quat_wxyz_to_matrix(pose_lookup[object_name]["quat_wxyz"]).astype(np.float32)
-        gt_rotation_cam = (world_to_cam[:3, :3] @ gt_rotation_world).astype(np.float32)
-        gt_translation_cam = (world_to_cam[:3, :3] @ gt_translation_world + world_to_cam[:3, 3]).astype(np.float32)
+        gt = gts[object_index]
+        gt_rotation_cam = np.asarray(gt["cam_R_m2c"], dtype=np.float32).reshape(3, 3)
+        gt_translation_cam = np.asarray(gt["cam_t_m2c"], dtype=np.float32).reshape(3) / 1000.0
 
         if self.use_gt_pose_for_prediction:
-            pred_rotation_world = gt_rotation_world
-            pred_translation_world = gt_translation_world
             pred_rotation_cam = gt_rotation_cam
             pred_translation_cam = gt_translation_cam
 
-        axis_length = axis_length_for_object(object_name, self.obj_root)
+        # ---- Errors ----
+        rot_error_deg, sym_count = symmetric_rotation_error_degrees(
+            pred_rotation_cam, gt_rotation_cam, object_id,
+            str(self.cfg.get("object_srt_symmetry_info_path", "")),
+            int(self.cfg.get("object_srt_symmetry_continuous_steps", 72)),
+        )
+        trans_error = translation_error(pred_translation_cam, gt_translation_cam)
+        mask_score = mask_iou(pred_mask, gt_mask)
 
-        pred_gallery = build_axes_gallery(
-            self.dataset_root, scene_name, frame_name,
-            pred_rotation_cam, pred_translation_cam, axis_length,
-            "Predicted axes", PRED_AXIS_COLORS,
+        # ---- Bbox sizes (pred size is clamped vs GT for stable visualization) ----
+        axis_length = self._ov9d_axis_length(object_id)
+        gt_size = self._ov9d_size(object_id)
+        raw_pred_size = pred_size if pred_size is not None else gt_size
+        size_for_pred_box, size_was_clipped = clamp_predicted_size_for_bbox(raw_pred_size, gt_size)
+        pred_bbox_obj = centered_axis_bbox_corners(size_for_pred_box)
+        gt_bbox_obj = centered_axis_bbox_corners(gt_size)
+        raw_bbox_iou_details = bbox_iou_3d_details(
+            raw_pred_size,
+            pred_rotation_cam,
+            pred_translation_cam,
+            gt_size,
+            gt_rotation_cam,
+            gt_translation_cam,
         )
-        gt_gallery = build_axes_gallery(
-            self.dataset_root, scene_name, frame_name,
-            gt_rotation_cam, gt_translation_cam, axis_length,
-            "GT axes", GT_AXIS_COLORS,
+        visualized_bbox_iou_details = bbox_iou_3d_details(
+            size_for_pred_box,
+            pred_rotation_cam,
+            pred_translation_cam,
+            gt_size,
+            gt_rotation_cam,
+            gt_translation_cam,
         )
-        pred_image = pred_gallery[0][0]
-        gt_image = gt_gallery[0][0]
 
-        summary = format_pose_markdown(
-            scene_name=scene_name,
-            frame_name=frame_name,
-            object_name=object_name,
-            checkpoint_path=self.checkpoint_path,
-            pred_translation_cam=pred_translation_cam,
-            pred_rotation_cam=pred_rotation_cam,
-            pred_translation_world=pred_translation_world,
-            pred_rotation_world=pred_rotation_world,
-            gt_translation_cam=gt_translation_cam,
-            gt_rotation_cam=gt_rotation_cam,
-            gt_translation_world=gt_translation_world,
-            gt_rotation_world=gt_rotation_world,
-            use_depth_input=use_depth_input,
+        # ---- 2D overlays ----
+        pred_image = draw_bbox_axes_overlay_on_image(
+            display_image, intrinsic, pred_rotation_cam, pred_translation_cam,
+            pred_bbox_obj, axis_length, PRED_AXIS_COLORS, PRED_BBOX_COLOR,
         )
+        gt_image = draw_bbox_axes_overlay_on_image(
+            display_image, intrinsic, gt_rotation_cam, gt_translation_cam,
+            gt_bbox_obj, axis_length, GT_AXIS_COLORS, GT_BBOX_COLOR,
+        )
+
+        # ---- Optional 3D point cloud export ----
         point_cloud_glb = None
-        if bool(show_point_cloud_pose):
-            point_cloud_glb = export_point_cloud_pose_glb(
-                self.dataset_root,
-                scene_name,
-                frame_name,
-                pred_rotation_cam,
-                pred_translation_cam,
-                gt_rotation_cam,
-                gt_translation_cam,
-                axis_length,
+        if show_point_cloud_pose:
+            point_cloud_glb = export_ov9d_point_cloud_pose_glb(
+                scene_name, f"{image_id:06d}",
+                display_image, display_depth, intrinsic,
+                pred_rotation_cam=pred_rotation_cam,
+                pred_translation_cam=pred_translation_cam,
+                pred_bbox_obj=pred_bbox_obj,
+                gt_rotation_cam=gt_rotation_cam,
+                gt_translation_cam=gt_translation_cam,
+                gt_bbox_obj=gt_bbox_obj,
+                axis_length=axis_length,
                 point_cloud_stride=point_cloud_stride,
             )
-        return summary, pred_image, gt_image, point_cloud_glb
+
+        # ---- Markdown summary ----
+        size_error = translation_error(raw_pred_size, gt_size)
+        pose_lines += [
+            "",
+            "### Predicted Pose",
+            f"- camera-frame translation (m): `{np.round(pred_translation_cam, 6).tolist()}`",
+            f"- camera-frame rotation matrix: `{np.round(pred_rotation_cam, 6).tolist()}`",
+            f"- raw predicted size xyz (m): `{np.round(raw_pred_size, 6).tolist()}`",
+            f"- visualized predicted bbox size xyz (m): `{np.round(size_for_pred_box, 6).tolist()}`"
+            + (" clipped for display" if size_was_clipped else ""),
+            "",
+            "### Ground Truth Pose",
+            f"- camera-frame translation (m): `{np.round(gt_translation_cam, 6).tolist()}`",
+            f"- camera-frame rotation matrix: `{np.round(gt_rotation_cam, 6).tolist()}`",
+            f"- GT size xyz (m): `{np.round(gt_size, 6).tolist()}`",
+            "",
+            "### Errors",
+            f"- translation L2 (m): `{trans_error['l2']:.6f}`",
+            f"- translation abs xyz (m): `{np.round(trans_error['abs_xyz'], 6).tolist()}`",
+            f"- raw predicted size L2 (m): `{size_error['l2']:.6f}`",
+            f"- raw predicted size abs xyz (m): `{np.round(size_error['abs_xyz'], 6).tolist()}`",
+            f"- symmetric rotation error (deg): `{rot_error_deg:.6f}` using `{sym_count}` symmetry candidates",
+            (
+                f"- 3D bbox IoU, raw size: `{raw_bbox_iou_details['iou']:.6f}` "
+                f"(intersection `{raw_bbox_iou_details['intersection_volume']:.8f}`, "
+                f"union `{raw_bbox_iou_details['union_volume']:.8f}`)"
+                if raw_bbox_iou_details is not None else "- 3D bbox IoU, raw size: `N/A`"
+            ),
+            (
+                f"- 3D bbox IoU, visualized size: `{visualized_bbox_iou_details['iou']:.6f}` "
+                f"(intersection `{visualized_bbox_iou_details['intersection_volume']:.8f}`, "
+                f"union `{visualized_bbox_iou_details['union_volume']:.8f}`)"
+                if visualized_bbox_iou_details is not None else "- 3D bbox IoU, visualized size: `N/A`"
+            ),
+            f"- mask IoU @0.5: `{mask_score:.6f}`" if mask_score is not None else "- mask IoU @0.5: `N/A`",
+        ]
+        return "\n".join(pose_lines), pred_image, gt_image, point_cloud_glb, pred_mask_image, gt_mask_image
 
 
+# ============================================================
+# Gradio UI
+# ============================================================
 def build_demo(app: DemoApp, image_focused_layout: bool = False):
-    default_scene = app.scene_choices[0]
+    default_split = app.default_split_name
+    default_scene = app.get_scene_choices(default_split)[0]
     default_frames = app.get_frame_choices(default_scene)
     default_frame = default_frames[0] if default_frames else None
-    default_objects = app.get_object_choices(default_scene)
-    default_object_choices = app.decorate_object_choices(default_objects)
-    default_object = default_objects[0] if default_objects else None
+    default_object_choices = app.ov9d_object_choices_for_frame(default_scene, default_frame)
+    default_object = default_object_choices[0][1] if default_object_choices else None
+    default_case_split = app.metric_case_split_choices[0] if app.metric_case_split_choices else None
+    default_case_metric_choices = app.get_metric_case_metric_choices(default_case_split) if default_case_split else []
+    default_case_metric = default_case_metric_choices[0][1] if default_case_metric_choices else None
+    default_case_status_choices = (
+        app.get_metric_case_status_choices(default_case_split, default_case_metric)
+        if default_case_split and default_case_metric else []
+    )
+    default_case_status = default_case_status_choices[0][1] if default_case_status_choices else None
+    default_case_choices = (
+        app.get_metric_case_dropdown_choices(default_case_split, default_case_metric, default_case_status)
+        if default_case_split and default_case_metric and default_case_status else []
+    )
+    default_case_id = default_case_choices[0][1] if default_case_choices else None
+    _, _, _, _, default_case_summary = app.metric_case_selection_to_target(
+        default_case_split or default_split,
+        default_case_metric or "",
+        default_case_status or "matched",
+        default_case_id,
+    )
 
     demo_css = """
     .gradio-container { max-width: 100% !important; }
@@ -979,43 +1473,42 @@ def build_demo(app: DemoApp, image_focused_layout: bool = False):
         #object_inputs { min-height: 22vh !important; }
         """
 
-    with gr.Blocks(title="OmniVGGT 6D Pose Demo (scene/frame)", css=demo_css) as demo:
-        info_markdown = "\n".join(
-            [
-                "# OmniVGGT 6D Pose Demo (single-view, scene/frame layout)",
-                f"- config: `{DEFAULT_CONFIG_PATH}`",
-                f"- dataset: `{app.dataset_root}`",
-                f"- object render root: `{app.object_render_root}`",
-                f"- obj (mesh) root: `{app.obj_root}`",
-                f"- default checkpoint: `{DEFAULT_PRETRAIN_MODEL}`",
-                f"- loaded checkpoint: `{app.checkpoint_path}`",
-                f"- object views: `{app.object_views}`",
-                f"- inference resolution: `{app.resolution}`",
-                f"- use_gt_pose_for_prediction: `{app.use_gt_pose_for_prediction}`",
-                f"- train_dataset_root: `{app.train_dataset_root}` "
-                + (
-                    f"(annotated {len(app.seen_objects)} seen objects with 🔴)"
-                    if app.seen_objects
-                    else "(annotation disabled)"
-                ),
-                "",
-                "選擇 `scene` → `frame` → `object`,只用單一 frame 的 RGB+Depth 做 pose 預測;"
-                "GT 是 `out_pose/poses.npz`(world)經 `out_cam_param/<frame>` 轉到 camera frame,"
-                "兩者比較 translation L2 與 rotation 角度誤差;畫面只畫物體中心的 X(紅)/Y(青)/Z(黃) 軸。"
-                "勾選點雲選項後，會再把原始深度投影成相機座標系點雲，並畫出 Pred / GT pose 軸。"
-                + (
-                    " 物件名稱前方的 🔴 表示該物件曾出現在 `--train-dataset-root` 指定的 dataset 中。"
-                    if app.seen_objects
-                    else ""
-                ),
-            ]
-        )
+    anchor_note = (
+        f"(🔴 marks {len(app.ov9d_train_object_ids)} anchor objects)"
+        if app.ov9d_train_object_ids else ""
+    )
+    info_markdown = "\n".join(
+        [
+            "# OmniVGGT 6D Pose Demo (OV9D, single-view)",
+            f"- config: `{DEFAULT_CONFIG_PATH}`",
+            f"- dataset: `{app.dataset_root}`",
+            f"- default checkpoint: `{DEFAULT_PRETRAIN_MODEL}`",
+            f"- loaded checkpoint: `{app.checkpoint_path}`",
+            f"- object views: `{app.object_views}`",
+            f"- inference resolution: `{app.resolution}`",
+            f"- OV9D split: `{app.ov9d_split_json}`",
+            f"- OV9D train split: `{app.ov9d_train_split_json}` {anchor_note}",
+            f"- use_gt_pose_for_prediction: `{app.use_gt_pose_for_prediction}`",
+            "",
+            "選擇 `scene` → `frame` → `object`,只用單一 frame 的 RGB+Depth 做 pose 預測;"
+            "會用 `scene_gt.json` 的 camera-frame GT 比較 translation、sym rotation 與 mask IoU。"
+            "不在該 frame 的 object 只輸出 presence。"
+            "勾選點雲選項後,會再把原始深度投影成相機座標系點雲,並畫出 Pred / GT pose 軸。"
+            + (
+                " 物件名稱前方的 🔴 表示該物件是 train split 的 anchor object。"
+                if app.ov9d_train_object_ids else ""
+            ),
+        ]
+    )
+
+    with gr.Blocks(title="OmniVGGT 6D Pose Demo (OV9D)", css=demo_css) as demo:
         if image_focused_layout:
             with gr.Accordion("Demo Info", open=False, elem_id="demo_info"):
                 gr.Markdown(info_markdown)
         else:
             gr.Markdown(info_markdown, elem_id="demo_info")
 
+        # ---- Checkpoint controls ----
         checkpoint_status = gr.Markdown(f"Loaded checkpoint: `{app.checkpoint_path}`")
         with gr.Row():
             checkpoint_dropdown = gr.Dropdown(
@@ -1031,24 +1524,49 @@ def build_demo(app: DemoApp, image_focused_layout: bool = False):
             )
             load_model_button = gr.Button("Load Model")
 
+        # ---- Scene / frame / object selectors ----
         with gr.Row():
+            split_dropdown = gr.Dropdown(
+                choices=app.ov9d_split_choices, value=default_split, label="Split",
+            )
             scene_dropdown = gr.Dropdown(choices=app.scene_choices, value=default_scene, label="Scene")
             frame_dropdown = gr.Dropdown(choices=default_frames, value=default_frame, label="Frame")
             object_dropdown = gr.Dropdown(choices=default_object_choices, value=default_object, label="Object")
             use_depth_checkbox = gr.Checkbox(value=True, label="Use Depth Input")
             show_point_cloud_checkbox = gr.Checkbox(value=False, label="Show Point Cloud Pose")
             point_cloud_stride_slider = gr.Slider(
-                minimum=1,
-                maximum=8,
-                value=2,
-                step=1,
-                label="Point Cloud Density",
-                info="Smaller = denser RGB point cloud",
+                minimum=1, maximum=8, value=2, step=1,
+                label="Point Cloud Density", info="Smaller = denser RGB point cloud",
             )
             infer_button = gr.Button("Run Inference", variant="primary")
 
-        big_height    = "38vh" if image_focused_layout else 360
-        thumb_height  = "18vh" if image_focused_layout else 180
+        with gr.Accordion("Metric Case Browser", open=False):
+            with gr.Row():
+                case_split_dropdown = gr.Dropdown(
+                    choices=app.metric_case_split_choices,
+                    value=default_case_split,
+                    label="Metric Split",
+                )
+                case_metric_dropdown = gr.Dropdown(
+                    choices=default_case_metric_choices,
+                    value=default_case_metric,
+                    label="Metric",
+                )
+                case_status_dropdown = gr.Dropdown(
+                    choices=default_case_status_choices,
+                    value=default_case_status,
+                    label="Case Status",
+                )
+                case_dropdown = gr.Dropdown(
+                    choices=default_case_choices,
+                    value=default_case_id,
+                    label="Case",
+                )
+            case_browser_summary = gr.Markdown(default_case_summary)
+
+        # ---- Image panels ----
+        big_height = "38vh" if image_focused_layout else 360
+        thumb_height = "18vh" if image_focused_layout else 180
 
         with gr.Row(elem_id="main_row", equal_height=False):
             with gr.Column(scale=1, elem_id="inputs_col"):
@@ -1080,34 +1598,171 @@ def build_demo(app: DemoApp, image_focused_layout: bool = False):
                     display_mode="solid",
                     clear_color=(0.0, 0.0, 0.0, 0.0),
                 )
+                with gr.Row():
+                    pred_mask_image = compat_image(
+                        label="Predicted object mask", height=thumb_height, interactive=False,
+                        show_download_button=False, container=True,
+                    )
+                    gt_mask_image = compat_image(
+                        label="GT object mask", height=thumb_height, interactive=False,
+                        show_download_button=False, container=True,
+                    )
 
         summary_markdown = gr.Markdown()
 
-        def refresh_scene_controls(scene_name: str):
-            frames = app.get_frame_choices(scene_name)
-            objects = app.get_object_choices(scene_name)
-            frame_value = frames[0] if frames else None
-            object_value = objects[0] if objects else None
-            return (
-                gr.update(choices=frames, value=frame_value),
-                gr.update(choices=app.decorate_object_choices(objects), value=object_value),
-            )
-
+        # ---- Event handlers ----
         def refresh_inputs(scene_name, frame_name, object_name):
             if not scene_name or not frame_name or not object_name:
                 return None, []
             return app.input_gallery(scene_name, frame_name, object_name)
 
+        def refresh_split_controls(
+            split_name: str,
+            preferred_scene: str | None = None,
+            preferred_frame: str | None = None,
+            preferred_object: str | None = None,
+        ):
+            scenes = app.get_scene_choices(split_name)
+            scene_value = preferred_scene if preferred_scene in scenes else (scenes[0] if scenes else None)
+            frames = app.get_frame_choices(scene_value) if scene_value else []
+            frame_value = preferred_frame if preferred_frame in frames else (frames[0] if frames else None)
+            object_choices = (
+                app.ov9d_object_choices_for_frame(scene_value, frame_value)
+                if scene_value and frame_value else []
+            )
+            object_values = [value for _, value in object_choices]
+            object_value = preferred_object if preferred_object in object_values else (object_values[0] if object_values else None)
+            scene_image, object_gallery = refresh_inputs(scene_value, frame_value, object_value)
+            return (
+                gr.update(choices=scenes, value=scene_value),
+                gr.update(choices=frames, value=frame_value),
+                gr.update(choices=object_choices, value=object_value),
+                scene_image,
+                object_gallery,
+            )
+
+        def refresh_scene_controls(scene_name: str, preferred_frame: str | None = None, preferred_object: str | None = None):
+            frames = app.get_frame_choices(scene_name)
+            frame_value = preferred_frame if preferred_frame in frames else (frames[0] if frames else None)
+            object_choices = (
+                app.ov9d_object_choices_for_frame(scene_name, frame_value)
+                if frame_value else []
+            )
+            object_values = [value for _, value in object_choices]
+            object_value = preferred_object if preferred_object in object_values else (object_values[0] if object_values else None)
+            return (
+                gr.update(choices=frames, value=frame_value),
+                gr.update(choices=object_choices, value=object_value),
+            )
+
+        def refresh_frame_controls(scene_name: str, frame_name: str, preferred_object: str | None = None):
+            if not (scene_name and frame_name):
+                return gr.update()
+            object_choices = app.ov9d_object_choices_for_frame(scene_name, frame_name)
+            object_values = [value for _, value in object_choices]
+            object_value = preferred_object if preferred_object in object_values else (object_values[0] if object_values else None)
+            return gr.update(choices=object_choices, value=object_value)
+
         def sync_checkpoint_path(selected_value: str):
             return selected_value
 
+        def _main_controls_for_target(split_name: str | None, scene_name: str | None, frame_name: str | None, object_name: str | None):
+            split_value = split_name if split_name in app.ov9d_split_choices else app.default_split_name
+            scene_choices = app.get_scene_choices(split_value)
+            if scene_name not in scene_choices:
+                scene_name = scene_choices[0] if scene_choices else None
+            frame_choices = app.get_frame_choices(scene_name) if scene_name else []
+            if frame_name not in frame_choices:
+                frame_name = frame_choices[0] if frame_choices else None
+            object_choices = (
+                app.ov9d_object_choices_for_frame(scene_name, frame_name)
+                if scene_name and frame_name else []
+            )
+            object_values = [value for _, value in object_choices]
+            if object_name not in object_values:
+                object_name = object_values[0] if object_values else None
+            scene_image, object_gallery = refresh_inputs(scene_name, frame_name, object_name)
+            return (
+                gr.update(choices=app.ov9d_split_choices, value=split_value),
+                gr.update(choices=scene_choices, value=scene_name),
+                gr.update(choices=frame_choices, value=frame_name),
+                gr.update(choices=object_choices, value=object_name),
+                scene_image,
+                object_gallery,
+            )
+
+        def refresh_case_split_controls(case_split_name: str):
+            metric_choices = app.get_metric_case_metric_choices(case_split_name)
+            metric_value = metric_choices[0][1] if metric_choices else None
+            status_choices = app.get_metric_case_status_choices(case_split_name, metric_value) if metric_value else []
+            status_value = status_choices[0][1] if status_choices else None
+            case_choices = app.get_metric_case_dropdown_choices(case_split_name, metric_value, status_value) if status_value else []
+            case_value = case_choices[0][1] if case_choices else None
+            target_split, target_scene, target_frame, target_object, summary = app.metric_case_selection_to_target(
+                case_split_name, metric_value or "", status_value or "matched", case_value,
+            )
+            main_updates = _main_controls_for_target(target_split, target_scene, target_frame, target_object)
+            return (
+                gr.update(choices=metric_choices, value=metric_value),
+                gr.update(choices=status_choices, value=status_value),
+                gr.update(choices=case_choices, value=case_value),
+                summary,
+                *main_updates,
+            )
+
+        def refresh_case_metric_controls(case_split_name: str, metric_name: str):
+            status_choices = app.get_metric_case_status_choices(case_split_name, metric_name)
+            status_value = status_choices[0][1] if status_choices else None
+            case_choices = app.get_metric_case_dropdown_choices(case_split_name, metric_name, status_value) if status_value else []
+            case_value = case_choices[0][1] if case_choices else None
+            target_split, target_scene, target_frame, target_object, summary = app.metric_case_selection_to_target(
+                case_split_name, metric_name or "", status_value or "matched", case_value,
+            )
+            main_updates = _main_controls_for_target(target_split, target_scene, target_frame, target_object)
+            return (
+                gr.update(choices=status_choices, value=status_value),
+                gr.update(choices=case_choices, value=case_value),
+                summary,
+                *main_updates,
+            )
+
+        def refresh_case_status_controls(case_split_name: str, metric_name: str, status: str):
+            case_choices = app.get_metric_case_dropdown_choices(case_split_name, metric_name, status)
+            case_value = case_choices[0][1] if case_choices else None
+            target_split, target_scene, target_frame, target_object, summary = app.metric_case_selection_to_target(
+                case_split_name, metric_name or "", status or "matched", case_value,
+            )
+            main_updates = _main_controls_for_target(target_split, target_scene, target_frame, target_object)
+            return (
+                gr.update(choices=case_choices, value=case_value),
+                summary,
+                *main_updates,
+            )
+
+        def apply_selected_case(case_split_name: str, metric_name: str, status: str, case_id: str):
+            target_split, target_scene, target_frame, target_object, summary = app.metric_case_selection_to_target(
+                case_split_name, metric_name or "", status or "matched", case_id,
+            )
+            main_updates = _main_controls_for_target(target_split, target_scene, target_frame, target_object)
+            return (summary, *main_updates)
+
+        split_dropdown.change(
+            refresh_split_controls,
+            inputs=[split_dropdown, scene_dropdown, frame_dropdown, object_dropdown],
+            outputs=[scene_dropdown, frame_dropdown, object_dropdown, scene_input_image, object_input_gallery],
+        )
         scene_dropdown.change(
-            refresh_scene_controls, inputs=scene_dropdown, outputs=[frame_dropdown, object_dropdown],
+            refresh_scene_controls, inputs=[scene_dropdown, frame_dropdown, object_dropdown], outputs=[frame_dropdown, object_dropdown],
         )
         scene_dropdown.change(
             refresh_inputs,
             inputs=[scene_dropdown, frame_dropdown, object_dropdown],
             outputs=[scene_input_image, object_input_gallery],
+        )
+        frame_dropdown.change(
+            refresh_frame_controls,
+            inputs=[scene_dropdown, frame_dropdown, object_dropdown],
+            outputs=object_dropdown,
         )
         frame_dropdown.change(
             refresh_inputs,
@@ -1125,6 +1780,64 @@ def build_demo(app: DemoApp, image_focused_layout: bool = False):
             inputs=checkpoint_textbox,
             outputs=[checkpoint_status, checkpoint_dropdown, checkpoint_textbox],
         )
+        case_split_dropdown.change(
+            refresh_case_split_controls,
+            inputs=case_split_dropdown,
+            outputs=[
+                case_metric_dropdown,
+                case_status_dropdown,
+                case_dropdown,
+                case_browser_summary,
+                split_dropdown,
+                scene_dropdown,
+                frame_dropdown,
+                object_dropdown,
+                scene_input_image,
+                object_input_gallery,
+            ],
+        )
+        case_metric_dropdown.change(
+            refresh_case_metric_controls,
+            inputs=[case_split_dropdown, case_metric_dropdown],
+            outputs=[
+                case_status_dropdown,
+                case_dropdown,
+                case_browser_summary,
+                split_dropdown,
+                scene_dropdown,
+                frame_dropdown,
+                object_dropdown,
+                scene_input_image,
+                object_input_gallery,
+            ],
+        )
+        case_status_dropdown.change(
+            refresh_case_status_controls,
+            inputs=[case_split_dropdown, case_metric_dropdown, case_status_dropdown],
+            outputs=[
+                case_dropdown,
+                case_browser_summary,
+                split_dropdown,
+                scene_dropdown,
+                frame_dropdown,
+                object_dropdown,
+                scene_input_image,
+                object_input_gallery,
+            ],
+        )
+        case_dropdown.change(
+            apply_selected_case,
+            inputs=[case_split_dropdown, case_metric_dropdown, case_status_dropdown, case_dropdown],
+            outputs=[
+                case_browser_summary,
+                split_dropdown,
+                scene_dropdown,
+                frame_dropdown,
+                object_dropdown,
+                scene_input_image,
+                object_input_gallery,
+            ],
+        )
         infer_button.click(
             app.run_inference,
             inputs=[
@@ -1135,7 +1848,7 @@ def build_demo(app: DemoApp, image_focused_layout: bool = False):
                 show_point_cloud_checkbox,
                 point_cloud_stride_slider,
             ],
-            outputs=[summary_markdown, pred_image, gt_image, point_cloud_model],
+            outputs=[summary_markdown, pred_image, gt_image, point_cloud_model, pred_mask_image, gt_mask_image],
         )
 
         if default_object is not None and default_frame is not None:
@@ -1147,17 +1860,19 @@ def build_demo(app: DemoApp, image_focused_layout: bool = False):
     return demo
 
 
+# ============================================================
+# Entry point
+# ============================================================
 def main():
-    parser = argparse.ArgumentParser(description="Gradio demo for OmniVGGT 6D pose inference (scene/frame layout)")
+    parser = argparse.ArgumentParser(description="Gradio demo for OmniVGGT 6D pose inference on OV9D")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     parser.add_argument("--checkpoint", type=str, default=None)
     parser.add_argument("--dataset-root", type=Path, default=DEFAULT_DATASET_ROOT)
-    parser.add_argument("--object-render-root", type=Path, default=DEFAULT_OBJECT_RENDER_ROOT)
-    parser.add_argument("--obj-root", type=Path, default=DEFAULT_OBJ_ROOT)
     parser.add_argument(
-        "--train-dataset-root", type=Path, default=None,
-        help="Optional dataset whose object names should be marked as 'seen' (🔴) in the Object dropdown."
-        " e.g. --train-dataset-root /mnt/train-data-4-hdd/yian/freepose/dataset/0421_randon_4000scene_30pose",
+        "--train-split-json",
+        type=Path,
+        default=None,
+        help="Optional OV9D train split JSON override. Defaults to the train_dataset split_json from the config.",
     )
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=7860)
@@ -1177,9 +1892,7 @@ def main():
         args.config,
         args.checkpoint,
         dataset_root=args.dataset_root,
-        object_render_root=args.object_render_root,
-        obj_root=args.obj_root,
-        train_dataset_root=args.train_dataset_root,
+        train_split_json=args.train_split_json,
         use_gt_pose_for_prediction=args.use_gt_pose_for_prediction,
     )
     demo = build_demo(app, image_focused_layout=args.image_focused_layout)
@@ -1187,11 +1900,7 @@ def main():
         server_name=args.host,
         server_port=args.port,
         share=args.share,
-        allowed_paths=[
-            str(app.dataset_root),
-            str(app.object_render_root),
-            str(app.obj_root),
-        ],
+        allowed_paths=[str(app.dataset_root)],
     )
 
 

@@ -24,6 +24,7 @@ from .wildrgb import Wildrgb
 
 SixDPose = import_module("omnivggt.datasets.6Dpose.6dpose_trajectory_noscale").SixDPose
 OV9DCameraPose = import_module("omnivggt.datasets.6Dpose.ov9d_camera_pose").OV9DCameraPose
+OO9DCameraPose = import_module("omnivggt.datasets.oo9d.oo9d_camera_pose").OO9DCameraPose
 
 from omnivggt.datasets.utils.transforms import ImgNorm, ColorJitter
 
