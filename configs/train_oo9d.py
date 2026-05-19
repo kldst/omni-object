@@ -5,7 +5,7 @@
 # accelerate launch --num_processes=1 train_omnivggt.py --config configs/train_oo9d.py
 
 output_dir = "outputs"
-exp_name = "oo9d_camera_pose_mask_presence_0515"
+exp_name = "oo9d_camera_pose_mask_presence_0520_hope"
 logging_dir = "logs"
 
 wandb = True
@@ -121,14 +121,14 @@ object_srt_symmetry_continuous_steps = 72
 # Dataset
 train_batch_images = 60
 val_batch_images = 60
-val_epoch_freq = 5
+val_epoch_freq = 8
 num_workers = 0
 resolution = (518, 476)
 # ov9d_root = "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d"
-# split_root = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/splits_ov9d_seen_unseen_scene"
+# split_root = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/splits_ov9d_unseen_category_generalization"
 # oo9d_object_image_root = "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d_around_image"
 ov9d_root = "/dataset/ov9d"
-split_root = "/omni-object_clone/splits_ov9d_seen_unseen_scene"
+split_root = "/omni-object_clone_0520/splits_ov9d_unseen_category_generalization"
 oo9d_object_image_root = "/dataset/ov9d_around_image"
 fixed_object_view_ids = (1, 5, 10, 15)
 strict_fixed_object_view_ids = True
@@ -158,8 +158,8 @@ val_dataset = (
     f"dataset_location='{ov9d_root}', "
     "dset='val', "
     f"split_root='{split_root}', "
-    f"multi_split_json='{split_root}/multi/val_seen_object_unseen_scene.json', "
-    f"single_split_json='{split_root}/single/train.json', "
+    f"multi_split_json='{split_root}/multi/test_unseen_category_unseen_object_unseen_scene.json', "
+    f"single_split_json='{split_root}/single/test_unseen_category_unseen_object.json', "
     f"object_image_root='{oo9d_object_image_root}', "
     "num_object_views=4, "
     f"fixed_object_view_ids={fixed_object_view_ids}, "

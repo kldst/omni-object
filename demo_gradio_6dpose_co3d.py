@@ -40,18 +40,19 @@ from omnivggt.utils.image import ImgNorm
 # ============================================================
 # Constants
 # ============================================================
-DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "train_ov9d_camera_pose.py"
+DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "train_oo9d.py"
 DEFAULT_PRETRAIN_MODEL = Path(
-    "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/outputs/0511/model.safetensors"
+    "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/outputs/0515_LARGE/model.safetensors"
 )
 DEFAULT_CO3D_ROOT = Path("/mnt/train-data-4-hdd/yian/freepose/co3d/data")
 DEFAULT_OV9D_ROOT = Path("/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d")
+DEFAULT_OBJECT_IMAGE_ROOT = Path("/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d_around_image")
 DEFAULT_TRAIN_SPLIT_JSON = Path(
-    "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/splits_multi_4_3000/train.json"
+    "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/splits_ov9d_seen_unseen_scene/single/train.json"
 )
 
-# Anchor reference views (override of the config-default object_input_views).
-FIXED_OBJECT_VIEWS = (10, 20, 30, 40)
+# Anchor reference views used by the OO9D 0515 model.
+FIXED_OBJECT_VIEWS = (1, 5, 10, 15)
 
 # Alternative: pick the first few CO3D frames of the scene itself as the object
 # reference. Requires the scene to have at least CO3D_OBJECT_SOURCE_MIN_FRAMES
@@ -134,6 +135,7 @@ def build_model_from_config(cfg: Dict, checkpoint_path: Path, device: torch.devi
         enable_depth=cfg.get("enable_depth", True),
         enable_object_mask=cfg.get("enable_object_mask", False),
         enable_object_srt=cfg.get("enable_object_srt", False),
+        enable_object_size=cfg.get("enable_object_size", True),
         always_use_depth_gt=cfg.get("always_use_depth_gt", False),
         patch_embed_pretrained_path=cfg.get("patch_embed_pretrained_path", None),
         load_patch_embed_from_hub=cfg.get("load_patch_embed_from_hub", True),
@@ -440,9 +442,16 @@ def resolve_co3d_scene_to_meter_scale(
 class OV9DAnchorIndex:
     """Resolves CO3D category -> OV9D anchor objects -> oo3d9dsingle render dirs."""
 
-    def __init__(self, ov9d_root: Path, train_split_json: Path, object_views: Sequence[int]):
+    def __init__(
+        self,
+        ov9d_root: Path,
+        train_split_json: Path,
+        object_views: Sequence[int],
+        object_image_root: Path = DEFAULT_OBJECT_IMAGE_ROOT,
+    ):
         self.ov9d_root = Path(ov9d_root)
         self.train_split_json = Path(train_split_json)
+        self.object_image_root = Path(object_image_root)
         self.object_views = tuple(int(v) for v in object_views)
 
         self.class_list: List[str] = read_json(self.ov9d_root / "class_list.json")
@@ -455,8 +464,11 @@ class OV9DAnchorIndex:
 
         train_payload = read_json(self.train_split_json)
         self.anchor_oids: set = {int(x) for x in train_payload.get("anchor_object_ids", [])}
+        self.anchor_oids.update(
+            int(item["object_id"]) for item in train_payload.get("scenes", []) if "object_id" in item
+        )
 
-        # Index oo3d9dsingle by oid (first matching render dir per oid).
+        # Index the OO9D around-image references by oid.
         self.single_dir_by_oid: Dict[int, Path] = self._index_oo3d9dsingle()
 
         # category name -> list of anchor oids that we can actually serve
@@ -475,6 +487,14 @@ class OV9DAnchorIndex:
                 self.anchor_oids_by_category[category_name] = category_anchors
 
     def _index_oo3d9dsingle(self) -> Dict[int, Path]:
+        if self.object_image_root.is_dir():
+            index = {}
+            for object_dir in sorted(p for p in self.object_image_root.iterdir() if p.is_dir()):
+                match = re.search(r"(\d+)$", object_dir.name)
+                if match:
+                    index.setdefault(int(match.group(1)), object_dir)
+            return index
+
         single_root = self.ov9d_root / "oo3d9dsingle"
         index: Dict[int, Path] = {}
         if not single_root.is_dir():
@@ -495,7 +515,7 @@ class OV9DAnchorIndex:
         for view in self.object_views:
             rgb = scene_dir / "rgb" / f"{int(view):06d}.png"
             mask = scene_dir / "mask_visib" / f"{int(view):06d}_000000.png"
-            if not rgb.is_file() or not mask.is_file():
+            if not rgb.is_file():
                 return False
         return True
 
@@ -607,11 +627,17 @@ def load_anchor_object_tensor(
     for view in anchor_index.object_views:
         rgb_path = scene_dir / "rgb" / f"{int(view):06d}.png"
         mask_path = scene_dir / "mask_visib" / f"{int(view):06d}_000000.png"
+        if not rgb_path.is_file():
+            raise FileNotFoundError(f"Missing anchor object view: {rgb_path}")
         rgb_arr = np.asarray(Image.open(rgb_path).convert("RGB"), dtype=np.uint8)
-        mask_arr = np.asarray(Image.open(mask_path).convert("L"), dtype=np.uint8)
-        white_bg = np.full_like(rgb_arr, 255)
-        white_bg[mask_arr > 0] = rgb_arr[mask_arr > 0]
-        image = Image.fromarray(white_bg, mode="RGB").resize(tuple(resolution), resampling.LANCZOS)
+        if mask_path.is_file():
+            mask_arr = np.asarray(Image.open(mask_path).convert("L"), dtype=np.uint8)
+            white_bg = np.full_like(rgb_arr, 255)
+            white_bg[mask_arr > 0] = rgb_arr[mask_arr > 0]
+            image = Image.fromarray(white_bg, mode="RGB")
+        else:
+            image = Image.fromarray(rgb_arr, mode="RGB")
+        image = image.resize(tuple(resolution), resampling.LANCZOS)
         tensors.append(processor.transform(image).to(device))
         gallery.append((np.asarray(image), f"Anchor view {int(view)}"))
     return torch.stack(tensors, dim=0).unsqueeze(0), gallery
@@ -1188,6 +1214,7 @@ def build_demo(app: DemoApp, image_focused_layout: bool = False):
             f"- config: `{DEFAULT_CONFIG_PATH}`",
             f"- CO3D root: `{app.co3d_root}`",
             f"- OV9D anchor source: `{app.anchor_index.ov9d_root}`",
+            f"- object references: `{app.anchor_index.object_image_root}`",
             f"- train split JSON: `{app.anchor_index.train_split_json}`",
             f"- anchor categories available: `{len(app.category_choices)}`",
             f"- default checkpoint: `{DEFAULT_PRETRAIN_MODEL}`",
@@ -1231,7 +1258,7 @@ def build_demo(app: DemoApp, image_focused_layout: bool = False):
             anchor_dropdown = gr.Dropdown(choices=default_anchors, value=default_anchor, label="Anchor Object")
             object_source_dropdown = gr.Dropdown(
                 choices=[
-                    ("OV9D anchor (views 10/20/30/40)", OBJECT_SOURCE_ANCHOR),
+                    (f"OV9D anchor (views {list(app.object_views)})", OBJECT_SOURCE_ANCHOR),
                     (
                         f"CO3D scene frames {list(CO3D_OBJECT_FRAMES)} "
                         f"(bg removed, needs ≥{CO3D_OBJECT_SOURCE_MIN_FRAMES} frames)",
