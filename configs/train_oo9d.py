@@ -67,7 +67,7 @@ debug_print_object_batch = False
 debug_print_object_batch_steps = 10
 debug_print_object_batch_max_samples = 10
 debug_print_object_batch_depth_stats = False
-object_presence_prob = 0.8
+object_presence_prob = 0.85
 cam_drop_prob = 1.0
 depth_drop_prob = 0.0
 always_use_depth_gt = True
@@ -136,7 +136,7 @@ strict_fixed_object_view_ids = True
 # train_object_image_root = f"{freepose_root}/ov9d/ov9d_around_image"
 
 #* 緯創
-freepose_root = "dataset"
+freepose_root = "/dataset"
 train_ov9d_root = f"{freepose_root}/ov9d"
 train_generated_multi_root = f"{freepose_root}/ov9d_2000_scenes_3modes_4views_v2"
 train_single_root = f"{train_ov9d_root}/oo3d9dsingle"
