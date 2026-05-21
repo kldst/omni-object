@@ -5,7 +5,7 @@
 # accelerate launch --num_processes=1 train_omnivggt.py --config configs/train_oo9d.py
 
 output_dir = "outputs"
-exp_name = "oo9d_camera_pose_mask_presence_0520_hope"
+exp_name = "oo9d_camera_pose_mask_presence_0521_norm_translate"
 logging_dir = "logs"
 
 wandb = True
@@ -67,7 +67,7 @@ debug_print_object_batch = False
 debug_print_object_batch_steps = 10
 debug_print_object_batch_max_samples = 10
 debug_print_object_batch_depth_stats = False
-object_presence_prob = 0.3
+object_presence_prob = 0.8
 cam_drop_prob = 1.0
 depth_drop_prob = 0.0
 always_use_depth_gt = True
@@ -124,50 +124,72 @@ val_batch_images = 60
 val_epoch_freq = 8
 num_workers = 0
 resolution = (518, 476)
-# ov9d_root = "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d"
-# split_root = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/splits_ov9d_unseen_category_generalization"
-# oo9d_object_image_root = "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d_around_image"
-ov9d_root = "/dataset/ov9d"
-split_root = "/omni-object_clone_0520/splits_ov9d_unseen_category_generalization"
-oo9d_object_image_root = "/dataset/ov9d_around_image"
 fixed_object_view_ids = (1, 5, 10, 15)
 strict_fixed_object_view_ids = True
 
+#* Local generated train data.
+# freepose_root = "/mnt/train-data-4-hdd/yian/freepose"
+# train_ov9d_root = f"{freepose_root}/ov9d/ov9d"
+# train_generated_multi_root = f"{freepose_root}/ov9d/render_script/ov9d_2000_scenes_3modes_4views_v2"
+# train_single_root = f"{train_ov9d_root}/oo3d9dsingle"
+# train_split_root = f"{freepose_root}/omni-object_clone/splits_ov9d_unseen_category_generalization"
+# train_object_image_root = f"{freepose_root}/ov9d/ov9d_around_image"
+
+#* 緯創
+freepose_root = "dataset"
+train_ov9d_root = f"{freepose_root}/ov9d"
+train_generated_multi_root = f"{freepose_root}/ov9d_2000_scenes_3modes_4views_v2"
+train_single_root = f"{train_ov9d_root}/oo3d9dsingle"
+train_split_root = f"/omni-object_clone_0520/splits_ov9d_unseen_category_generalization"
+train_object_image_root = f"{freepose_root}/ov9d_around_image"
+
+val_ov9d_root = train_ov9d_root
+val_generated_multi_root = train_generated_multi_root
+val_single_root = train_single_root
+val_single_split_json = f"{train_split_root}/single/test_unseen_category_unseen_object.json"
+val_object_image_root = train_object_image_root
+
 train_dataset = (
-    "OO9DCameraPose("
-    f"dataset_location='{ov9d_root}', "
+    "OO9DGeneratedMultiCameraPose("
+    f"dataset_location='{train_ov9d_root}', "
     "dset='train', "
-    f"split_root='{split_root}', "
-    f"multi_split_json='{split_root}/multi/train.json', "
-    f"single_split_json='{split_root}/single/train.json', "
-    f"object_image_root='{oo9d_object_image_root}', "
+    f"generated_multi_root='{train_generated_multi_root}', "
+    f"single_root='{train_single_root}', "
+    f"single_split_json='{train_split_root}/single/train.json', "
+    f"object_image_root='{train_object_image_root}', "
     "num_object_views=4, "
     f"fixed_object_view_ids={fixed_object_view_ids}, "
     f"strict_fixed_object_view_ids={strict_fixed_object_view_ids}, "
+    "filter_single_train_objects=True, "
+    "include_single_targets=True, "
+    "normalize_object_translation_by_depth_mean=True, "
     "expand_records_by_view=True, "
     "verify_files=True, "
     f"object_presence_prob={object_presence_prob}, "
     "z_far=20, "
-    "resolution=(518, 476), "
+    f"resolution={resolution}, "
     "transform=ColorJitter, "
     "seed=42)"
 )
 
 val_dataset = (
-    "OO9DCameraPose("
-    f"dataset_location='{ov9d_root}', "
+    "OO9DGeneratedMultiCameraPose("
+    f"dataset_location='{val_ov9d_root}', "
     "dset='val', "
-    f"split_root='{split_root}', "
-    f"multi_split_json='{split_root}/multi/test_unseen_category_unseen_object_unseen_scene.json', "
-    f"single_split_json='{split_root}/single/test_unseen_category_unseen_object.json', "
-    f"object_image_root='{oo9d_object_image_root}', "
+    f"generated_multi_root='{val_generated_multi_root}', "
+    f"single_root='{val_single_root}', "
+    f"single_split_json='{val_single_split_json}', "
+    f"object_image_root='{val_object_image_root}', "
     "num_object_views=4, "
     f"fixed_object_view_ids={fixed_object_view_ids}, "
     f"strict_fixed_object_view_ids={strict_fixed_object_view_ids}, "
+    "filter_single_train_objects=True, "
+    "include_single_targets=True, "
+    "normalize_object_translation_by_depth_mean=True, "
     "expand_records_by_view=True, "
     "verify_files=True, "
     "object_presence_prob=0.5, "
     "z_far=20, "
-    "resolution=(518, 476), "
+    f"resolution={resolution}, "
     "seed=42)"
 )

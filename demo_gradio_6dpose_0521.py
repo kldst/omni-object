@@ -42,6 +42,12 @@ DEFAULT_SPLITS_ROOT = PROJECT_ROOT / "splits_ov9d_seen_unseen_scene"
 DEFAULT_EVAL_SPLIT_JSON = DEFAULT_SPLITS_ROOT / "single" / "val_same_category_unseen_object.json"
 DEFAULT_TRAIN_SPLIT_JSON = DEFAULT_SPLITS_ROOT / "single" / "train.json"
 DEFAULT_MULTI_SPLIT_JSON = DEFAULT_SPLITS_ROOT / "multi" / "test_same_category_unseen_object_unseen_scene.json"
+DEFAULT_RENDERED_DATASET_ROOT = Path(
+    "/mnt/train-data-4-hdd/yian/freepose/ov9d/render_script/ov9d_2000_scenes_3modes_4views"
+)
+DEFAULT_RENDERED_DATASET_ROOT_V2 = Path(
+    "/mnt/train-data-4-hdd/yian/freepose/ov9d/render_script/ov9d_2000_scenes_3modes_4views_v2"
+)
 DEFAULT_PRETRAIN_MODEL = Path(
     "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/outputs/0515_LARGE/model.safetensors"
 )
@@ -116,7 +122,7 @@ def resolve_runtime_settings(cfg: Dict) -> Dict:
     )
     resolution = tuple(int(v) for v in cfg.get("resolution", (518, 518)))
     return {
-        "object_input_views": tuple(int(v) for v in object_input_views),
+        "object_input_views": tuple(sorted(int(v) for v in object_input_views)),
         "resolution": resolution,
         "object_image_root": parse_dataset_ctor_arg(dataset_expr, "object_image_root", default=None),
     }
@@ -817,6 +823,8 @@ class OV9DDemoApp:
             "eval": DEFAULT_EVAL_SPLIT_JSON,
             "train": DEFAULT_TRAIN_SPLIT_JSON,
             "multi": DEFAULT_MULTI_SPLIT_JSON,
+            "rendered_2000": DEFAULT_RENDERED_DATASET_ROOT,
+            "rendered_2000_v2": DEFAULT_RENDERED_DATASET_ROOT_V2,
         }
         self.default_split_name = "eval"
         self.ov9d_split_records = {
@@ -846,10 +854,13 @@ class OV9DDemoApp:
         path = resolve_local_path(value)
         return path if path is not None and path.is_file() else None
 
-    def _load_ov9d_split_records(self, split_json: Path) -> Dict[str, Dict]:
-        if not split_json.is_file():
-            raise FileNotFoundError(f"Split JSON not found: {split_json}")
-        payload = read_json(split_json)
+    def _load_ov9d_split_records(self, split_path: Path) -> Dict[str, Dict]:
+        split_path = Path(split_path)
+        if split_path.is_dir():
+            return self._load_rendered_split_records(split_path)
+        if not split_path.is_file():
+            raise FileNotFoundError(f"Split source not found: {split_path}")
+        payload = read_json(split_path)
         records = {}
         for item in payload.get("scenes", []):
             scene_name = str(item["scene_name"])
@@ -859,6 +870,37 @@ class OV9DDemoApp:
             record = dict(item)
             record["scene_dir"] = scene_dir
             records[scene_name] = record
+        return records
+
+    def _load_rendered_split_records(self, root: Path) -> Dict[str, Dict]:
+        records: Dict[str, Dict] = {}
+        if not root.is_dir():
+            return records
+        for scene_dir in sorted(root.iterdir()):
+            if not scene_dir.is_dir():
+                continue
+            if not scene_dir.name.startswith("scene_"):
+                continue
+            scene_gt_path = scene_dir / "scene_gt.json"
+            if not scene_gt_path.is_file():
+                continue
+            try:
+                scene_gt = read_json(scene_gt_path)
+            except Exception:
+                continue
+            obj_ids: List[int] = []
+            for frame_entries in scene_gt.values():
+                for entry in frame_entries:
+                    if "obj_id" in entry:
+                        obj_ids.append(int(entry["obj_id"]))
+            object_ids = sorted(set(obj_ids))
+            records[scene_dir.name] = {
+                "scene_name": scene_dir.name,
+                "scene_dir": scene_dir,
+                "relative_path": str(scene_dir),
+                "object_ids": object_ids,
+                "is_rendered": True,
+            }
         return records
 
     def _resolve_scene_dir(self, item: Dict) -> Path:
@@ -928,19 +970,23 @@ class OV9DDemoApp:
         object_ids = {int(item["object_id"]) for item in payload.get("scenes", []) if "object_id" in item}
         return {oid for oid in object_ids if oid in self.ov9d_single_records_by_object_id}
 
-    def _ov9d_size(self, object_id: int) -> np.ndarray:
+    def _ov9d_size(self, object_id: int, scale: float | None = None) -> np.ndarray:
         info = self.ov9d_models_info.get(str(int(object_id)), {})
-        return np.asarray(
+        size_mm = np.asarray(
             [info.get("size_x", 100.0), info.get("size_y", 100.0), info.get("size_z", 100.0)],
             dtype=np.float32,
-        ) / 1000.0
+        )
+        # Default scale converts mm (OV9D PLY native units) to m. For rendered
+        # scenes each GT entry carries its own mesh scale (Blender m / PLY mm).
+        effective_scale = 1.0 / 1000.0 if scale is None else float(scale)
+        return size_mm * effective_scale
 
-    def _ov9d_axis_length(self, object_id: int) -> float:
-        return max(float(np.linalg.norm(self._ov9d_size(object_id))) * 0.25, 1e-3)
+    def _ov9d_axis_length(self, object_id: int, scale: float | None = None) -> float:
+        return max(float(np.linalg.norm(self._ov9d_size(object_id, scale=scale))) * 0.25, 1e-3)
 
     @property
     def ov9d_split_choices(self) -> List[str]:
-        return ["eval", "train", "multi"]
+        return list(self.split_json_map.keys())
 
     def get_scene_choices(self, split_name: str | None = None) -> List[str]:
         split = split_name if split_name in self.ov9d_split_records else self.default_split_name
@@ -1149,6 +1195,7 @@ class OV9DDemoApp:
         gt = gts[object_index]
         gt_rotation_cam = np.asarray(gt["cam_R_m2c"], dtype=np.float32).reshape(3, 3)
         gt_translation_cam = np.asarray(gt["cam_t_m2c"], dtype=np.float32).reshape(3) / 1000.0
+        gt_scale = float(gt["scale"]) if "scale" in gt else None
         if self.use_gt_pose_for_prediction:
             pred_rotation_cam = gt_rotation_cam
             pred_translation_cam = gt_translation_cam
@@ -1163,8 +1210,8 @@ class OV9DDemoApp:
         trans_error = translation_error(pred_translation_cam, gt_translation_cam)
         mask_score = mask_iou(pred_mask, gt_mask)
 
-        axis_length = self._ov9d_axis_length(object_id)
-        gt_size = self._ov9d_size(object_id)
+        axis_length = self._ov9d_axis_length(object_id, scale=gt_scale)
+        gt_size = self._ov9d_size(object_id, scale=gt_scale)
         raw_pred_size = pred_size if pred_size is not None else gt_size
         size_for_pred_box, size_was_clipped = clamp_predicted_size_for_bbox(raw_pred_size, gt_size)
         pred_bbox_obj = centered_axis_bbox_corners(size_for_pred_box)
@@ -1296,11 +1343,13 @@ def build_demo(app: OV9DDemoApp):
             f"- eval split: `{DEFAULT_EVAL_SPLIT_JSON}`",
             f"- train split: `{DEFAULT_TRAIN_SPLIT_JSON}`",
             f"- multi split: `{DEFAULT_MULTI_SPLIT_JSON}`",
+            f"- rendered_2000 split: `{DEFAULT_RENDERED_DATASET_ROOT}`",
+            f"- rendered_2000_v2 split: `{DEFAULT_RENDERED_DATASET_ROOT_V2}`",
             f"- object views: `{app.object_views}`",
             f"- inference resolution: `{app.resolution}`",
             "",
-            "這個頁面只保留 `splits_ov9d_seen_unseen_scene` 的 `eval`、`train`、`multi` 三種資料。",
-            "scene/frame/object 都會從這三份 split 對應的 OV9D scene 中載入。",
+            "支援的 split：`eval`、`train`、`multi` 來自 `splits_ov9d_seen_unseen_scene`；",
+            "`rendered_2000` / `rendered_2000_v2` 是 `ov9d_2000_scenes_3modes_4views(_v2)` 渲染資料（multi-object，每 scene 4 frames，無 mask GT）。",
         ]
     )
 
@@ -1516,7 +1565,12 @@ def main():
         server_name=args.host,
         server_port=args.port,
         share=args.share,
-        allowed_paths=[str(app.dataset_root), str(app.object_image_root)],
+        allowed_paths=[
+            str(app.dataset_root),
+            str(app.object_image_root),
+            str(DEFAULT_RENDERED_DATASET_ROOT),
+            str(DEFAULT_RENDERED_DATASET_ROOT_V2),
+        ],
     )
 
 

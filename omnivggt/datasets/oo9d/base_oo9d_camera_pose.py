@@ -356,6 +356,8 @@ class OO9DCameraPoseBase(BaseStereoViewDataset):
             if object_index is None:
                 raise KeyError(f"Object {target_object_id} not found in {rec['scene_name']} frame {image_id}")
             scene_mask_path = rec["scene_dir"] / "mask_visib" / f"{image_id:06d}_{object_index:06d}.png"
+            if not scene_mask_path.is_file():
+                scene_mask_path = None
         else:
             scene_mask_path = None
 

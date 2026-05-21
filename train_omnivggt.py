@@ -411,6 +411,20 @@ def _prepare_batch_and_compute_loss(batch, model, criterion):
     return batch, predictions, loss_dict, loss_details
 
 
+def _ordered_loss_postfix(loss_details, preferred_keys):
+    ordered = {
+        key: loss_details[key]
+        for key in preferred_keys
+        if key in loss_details
+    }
+    ordered.update({
+        key: value
+        for key, value in loss_details.items()
+        if key not in ordered
+    })
+    return ordered
+
+
 def run_validation(model, val_dataloader, criterion, accelerator, cfg, epoch, global_step, writer):
     if val_dataloader is None:
         return None
@@ -452,9 +466,9 @@ def run_validation(model, val_dataloader, criterion, accelerator, cfg, epoch, gl
             )
 
         preferred_postfix_keys = (
-            "loss_object_srt",
             "loss_object_pose",
             "loss_object_translation",
+            "loss_object_srt",
             "loss_object_size",
             "rot_err_deg",
             "translation_err_cm",
@@ -848,7 +862,18 @@ if __name__ == '__main__':
             )
             
             accelerator.backward(loss_dict['objective'])
-            progress_bar.set_postfix(**loss_details)
+            train_postfix_keys = (
+                "loss_object_pose",
+                "loss_object_translation",
+                "loss_object_srt",
+                "rot_err_deg",
+                "translation_err_cm",
+                "loss_object_size",
+                "loss_object_mask",
+                "loss_object_presence",
+                "acc_object_presence",
+            )
+            progress_bar.set_postfix(_ordered_loss_postfix(loss_details, train_postfix_keys))
             
             # Optimizer step with gradient accumulation
             if (step + 1) % accumulation_steps == 0:

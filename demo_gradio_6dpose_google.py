@@ -11,7 +11,7 @@ os.environ.setdefault("GRADIO_TEMP_DIR", str(_LOCAL_TMP))
 os.environ.setdefault("GRADIO_CACHE_DIR", str(_LOCAL_TMP))
 os.environ.setdefault("TMPDIR", str(_LOCAL_TMP))
 os.environ.setdefault("MPLCONFIGDIR", str(_LOCAL_TMP / "matplotlib"))
-os.environ.setdefault("CUDA_VISIBLE_DEVICES", "1")
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
 import argparse
 import inspect
@@ -36,19 +36,27 @@ from omnivggt.utils.image import ImgNorm
 
 
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "train_oo9d.py"
-DEFAULT_DATASET_ROOT = Path("/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d")
-DEFAULT_OBJECT_IMAGE_ROOT = Path("/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d_around_image")
-DEFAULT_SPLITS_ROOT = PROJECT_ROOT / "splits_ov9d_seen_unseen_scene"
-DEFAULT_EVAL_SPLIT_JSON = DEFAULT_SPLITS_ROOT / "single" / "val_same_category_unseen_object.json"
-DEFAULT_TRAIN_SPLIT_JSON = DEFAULT_SPLITS_ROOT / "single" / "train.json"
-DEFAULT_MULTI_SPLIT_JSON = DEFAULT_SPLITS_ROOT / "multi" / "test_same_category_unseen_object_unseen_scene.json"
 DEFAULT_PRETRAIN_MODEL = Path(
     "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/outputs/0515_LARGE/model.safetensors"
+)
+DEFAULT_GOOGLE_DEMO_ROOT = Path(
+    "/mnt/train-data-4-hdd/yian/freepose/ov9d/google_random_template_batch_upright_v2"
 )
 
 AXIS_COLORS = ((255, 64, 64), (0, 255, 255), (255, 215, 0))
 PRED_BBOX_COLOR = (0, 255, 0)
 GT_BBOX_COLOR = (255, 160, 0)
+
+# Visualization-only post-rotation: after the model / GT rotation R is computed,
+# the bbox and axes are rotated +90 deg about the object's up axis (+Y / cyan)
+# in world space via R_vis = R @ R_VIS_POST_ROT. size_xyz is NOT permuted, so
+# the bbox physically turns 90 deg about up rather than just relabeling axes.
+R_VIS_POST_ROT = np.array(
+    [[ 0.0, 0.0, 1.0],
+     [ 0.0, 1.0, 0.0],
+     [-1.0, 0.0, 0.0]],
+    dtype=np.float64,
+)
 BBOX_EDGES = (
     (0, 1), (1, 3), (3, 2), (2, 0),
     (4, 5), (5, 7), (7, 6), (6, 4),
@@ -84,41 +92,19 @@ def parse_dataset_ctor_arg(dataset_expr: str, arg_name: str, default=None):
         return default
 
 
-def resolve_local_path(value, *, default=None) -> Path | None:
-    if value in (None, ""):
-        return Path(default) if default is not None else None
-    path = Path(str(value)).expanduser()
-    if path.exists():
-        return path
-    text = str(path)
-    replacements = {
-        "/dataset/ov9d_around_image": str(DEFAULT_OBJECT_IMAGE_ROOT),
-        "/dataset/ov9d": str(DEFAULT_DATASET_ROOT),
-        "/dataset": str(DEFAULT_DATASET_ROOT),
-        "/omni-object_clone": str(PROJECT_ROOT),
-    }
-    for prefix, replacement in replacements.items():
-        if text == prefix or text.startswith(prefix + "/"):
-            candidate = Path(replacement + text[len(prefix):])
-            if candidate.exists():
-                return candidate
-    return path
-
-
 def resolve_runtime_settings(cfg: Dict) -> Dict:
     dataset_expr = str(cfg.get("val_dataset", cfg.get("train_dataset", "")))
     object_input_views = tuple(
         parse_dataset_ctor_arg(
             dataset_expr,
             "object_input_views",
-            default=parse_dataset_ctor_arg(dataset_expr, "fixed_object_view_ids", default=(1, 5, 10, 15)),
+            default=parse_dataset_ctor_arg(dataset_expr, "fixed_object_view_ids", default=(5, 10, 15, 1)),
         )
     )
     resolution = tuple(int(v) for v in cfg.get("resolution", (518, 518)))
     return {
         "object_input_views": tuple(int(v) for v in object_input_views),
         "resolution": resolution,
-        "object_image_root": parse_dataset_ctor_arg(dataset_expr, "object_image_root", default=None),
     }
 
 
@@ -252,22 +238,6 @@ def read_json(path: Path):
         return json.load(handle)
 
 
-def ov9d_object_key(object_id: int) -> str:
-    return f"obj_{int(object_id):06d}"
-
-
-def ov9d_object_id_from_key(value) -> int:
-    match = re.search(r"(\d+)$", str(value))
-    if not match:
-        raise ValueError(f"Could not parse OV9D object id from: {value}")
-    return int(match.group(1))
-
-
-def ov9d_object_display_name(object_id: int, oid_to_name: Dict[int, str]) -> str:
-    object_id = int(object_id)
-    return f"{ov9d_object_key(object_id)} · {oid_to_name.get(object_id, 'unknown')}"
-
-
 def format_optional_float(value, digits: int = 3) -> str:
     if value is None:
         return "N/A"
@@ -294,7 +264,7 @@ def ov9d_read_binary_mask(mask_path: Path) -> np.ndarray:
 
 class DemoScenePreprocessor(BaseStereoViewDataset):
     def __init__(self, resolution):
-        super().__init__(dset="ov9d_demo", resolution=resolution, transform=ImgNorm, seed=0)
+        super().__init__(dset="google_demo", resolution=resolution, transform=ImgNorm, seed=0)
 
 
 def crop_resize_image_depth_mask(
@@ -332,26 +302,21 @@ def crop_resize_image_depth_mask(
     )
 
 
-def load_ov9d_object_tensor(
-    single_records_by_object_id: Dict[int, List[Dict]],
-    object_id: int,
+def load_object_tensor(
+    object_record: Dict,
     object_views: Sequence[int],
     resolution,
     device,
 ) -> Tuple[torch.Tensor, List[Tuple[np.ndarray, str]]]:
-    object_id = int(object_id)
-    if object_id not in single_records_by_object_id:
-        raise FileNotFoundError(f"No OV9D single-object reference renders for object id {object_id}")
-    single_rec = single_records_by_object_id[object_id][0]
     processor = DemoScenePreprocessor(resolution=resolution)
     resampling = getattr(Image, "Resampling", Image)
     tensors: List[torch.Tensor] = []
     gallery: List[Tuple[np.ndarray, str]] = []
     for image_id in object_views:
-        image_path = single_rec["scene_dir"] / "rgb" / f"{int(image_id):06d}.png"
-        mask_path = single_rec["scene_dir"] / "mask_visib" / f"{int(image_id):06d}_000000.png"
+        image_path = object_record["object_dir"] / "rgb" / f"{int(image_id):06d}.png"
+        mask_path = object_record["object_dir"] / "mask_visib" / f"{int(image_id):06d}_000000.png"
         if not image_path.is_file():
-            raise FileNotFoundError(f"Missing OV9D object reference view: {image_path}")
+            raise FileNotFoundError(f"Missing object reference view: {image_path}")
         rgb_arr = np.asarray(Image.open(image_path).convert("RGB"), dtype=np.uint8)
         if mask_path.is_file():
             mask_arr = np.asarray(Image.open(mask_path).convert("L"), dtype=np.uint8)
@@ -366,17 +331,17 @@ def load_ov9d_object_tensor(
     return torch.stack(tensors, dim=0).unsqueeze(0), gallery
 
 
-def load_ov9d_scene_frame_inputs(
-    scene_dir: Path,
+def load_scene_frame_inputs(
+    scene_record: Dict,
     image_id: int,
-    object_id: int,
     resolution,
     device,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, np.ndarray, np.ndarray, np.ndarray | None, np.ndarray]:
-    camera_entry = read_json(scene_dir / "scene_camera.json")[str(image_id)]
-    gts = read_json(scene_dir / "scene_gt.json")[str(image_id)]
+    scene_dir = scene_record["scene_dir"]
+    camera_entry = scene_record["scene_camera"][str(image_id)]
+    gts = scene_record["scene_gt"][str(image_id)]
     object_index = next(
-        (idx for idx, gt in enumerate(gts) if int(gt.get("obj_id", -1)) == int(object_id)),
+        (idx for idx, gt in enumerate(gts) if int(gt.get("obj_id", -1)) == int(scene_record["object_id"])),
         None,
     )
 
@@ -726,7 +691,7 @@ def depth_to_camera_points(
     return points, colors
 
 
-def export_ov9d_point_cloud_pose_glb(
+def export_point_cloud_pose_glb(
     scene_name: str,
     frame_name: str,
     rgb_image: np.ndarray,
@@ -747,7 +712,7 @@ def export_ov9d_point_cloud_pose_glb(
 
     safe_scene = re.sub(r"[^a-zA-Z0-9_]+", "_", scene_name)[:120]
     safe_frame = re.sub(r"[^a-zA-Z0-9_]+", "_", str(frame_name))[:120]
-    out_dir = _LOCAL_TMP / "ov9d_point_cloud_pose_glb" / safe_scene
+    out_dir = _LOCAL_TMP / "google_pose_glb" / safe_scene
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{safe_frame}_stride{stride}_{int(time.time_ns())}.glb"
 
@@ -768,10 +733,10 @@ def export_ov9d_point_cloud_pose_glb(
         mesh.visual.face_colors = np.tile(rgba, (len(mesh.faces), 1))
         scene_3d.add_geometry(mesh)
 
-    def add_pose(rotation_cam, translation_cam, bbox_obj, bbox_color):
+    def add_pose(rotation_cam, translation_cam, bbox_obj, bbox_color, axis_colors):
         center = np.asarray(translation_cam, dtype=np.float32)
         axis_pts = _axis_object_points(viewer_axis_length) @ rotation_cam.T + translation_cam[None, :]
-        for idx, axis_color in enumerate(AXIS_COLORS):
+        for idx, axis_color in enumerate(axis_colors):
             add_segment(center, axis_pts[idx + 1], axis_color)
         if bbox_obj is not None:
             bbox_cam = np.asarray(bbox_obj, dtype=np.float32) @ rotation_cam.T + translation_cam[None, :]
@@ -779,59 +744,36 @@ def export_ov9d_point_cloud_pose_glb(
                 add_segment(bbox_cam[start_idx], bbox_cam[end_idx], bbox_color)
 
     if pred_rotation_cam is not None and pred_translation_cam is not None:
-        add_pose(pred_rotation_cam, pred_translation_cam, pred_bbox_obj, PRED_BBOX_COLOR)
+        add_pose(pred_rotation_cam, pred_translation_cam, pred_bbox_obj, PRED_BBOX_COLOR, AXIS_COLORS)
     if gt_rotation_cam is not None and gt_translation_cam is not None:
-        add_pose(gt_rotation_cam, gt_translation_cam, gt_bbox_obj, GT_BBOX_COLOR)
+        add_pose(gt_rotation_cam, gt_translation_cam, gt_bbox_obj, GT_BBOX_COLOR, AXIS_COLORS)
 
     scene_3d.export(out_path)
     return str(out_path)
 
 
-class OV9DDemoApp:
+class GoogleDemoApp:
     def __init__(
         self,
         config_path: Path,
         checkpoint_path: str | None,
-        dataset_root: Path,
-        object_image_root: Path | None = None,
+        google_demo_root: Path,
         use_gt_pose_for_prediction: bool = False,
     ):
         self.config_path = Path(config_path)
         self.cfg = load_config(self.config_path)
         self.runtime = resolve_runtime_settings(self.cfg)
-        self.dataset_root = Path(dataset_root).expanduser()
-        runtime_object_root = resolve_local_path(self.runtime.get("object_image_root"), default=object_image_root or DEFAULT_OBJECT_IMAGE_ROOT)
-        self.object_image_root = runtime_object_root or DEFAULT_OBJECT_IMAGE_ROOT
         self.object_views = tuple(int(v) for v in self.runtime["object_input_views"])
         self.resolution = tuple(int(v) for v in self.runtime["resolution"])
+        self.google_demo_root = Path(google_demo_root).expanduser()
+        self.data_root, self.object_image_root = self._resolve_google_demo_layout()
         self.use_gt_pose_for_prediction = bool(use_gt_pose_for_prediction)
         self.symmetry_info_path = self._resolve_symmetry_info_path()
 
-        self.ov9d_multi_root = self.dataset_root / "oo3d9dmulti"
-        self.ov9d_single_root = self.dataset_root / "oo3d9dsingle"
-        self.ov9d_models_info = read_json(self.dataset_root / "models_info.json")
-        self.ov9d_name_to_oid = {str(k): int(v) for k, v in read_json(self.dataset_root / "name2oid.json").items()}
-        self.ov9d_oid_to_name = {oid: name for name, oid in self.ov9d_name_to_oid.items()}
-
-        self.split_json_map = {
-            "eval": DEFAULT_EVAL_SPLIT_JSON,
-            "train": DEFAULT_TRAIN_SPLIT_JSON,
-            "multi": DEFAULT_MULTI_SPLIT_JSON,
-        }
-        self.default_split_name = "eval"
-        self.ov9d_split_records = {
-            split_name: self._load_ov9d_split_records(path)
-            for split_name, path in self.split_json_map.items()
-        }
-        self.ov9d_all_scene_records: Dict[str, Dict] = {}
-        for records in self.ov9d_split_records.values():
-            self.ov9d_all_scene_records.update(records)
-
-        self.ov9d_single_records_by_object_id = self._build_ov9d_single_records_by_object_id()
-        self.train_object_ids = self._collect_train_object_ids()
-        self.scene_choices = self.get_scene_choices(self.default_split_name)
+        self.scene_records = self._load_scene_records()
+        self.scene_choices = sorted(self.scene_records)
         if not self.scene_choices:
-            raise RuntimeError("No OV9D scenes found in the configured splits.")
+            raise RuntimeError(f"No valid Google demo scenes found under {self.data_root}")
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.checkpoint_path = resolve_checkpoint_path(self.cfg, checkpoint_path)
@@ -839,163 +781,97 @@ class OV9DDemoApp:
         self.available_checkpoints = self.discover_checkpoints()
         self.load_checkpoint(self.checkpoint_path)
 
+    def _resolve_google_demo_layout(self) -> Tuple[Path, Path]:
+        nested_data_root = self.google_demo_root / "data"
+        nested_object_root = nested_data_root / "_object_images"
+        if nested_data_root.is_dir() and nested_object_root.is_dir():
+            return nested_data_root, nested_object_root
+
+        flat_object_root = self.google_demo_root / "_object_images"
+        if self.google_demo_root.is_dir() and flat_object_root.is_dir():
+            return self.google_demo_root, flat_object_root
+
+        raise FileNotFoundError(
+            "Unable to resolve Google demo layout. Expected either "
+            f"`{nested_object_root}` or `{flat_object_root}`."
+        )
+
     def _resolve_symmetry_info_path(self) -> Path | None:
         value = self.cfg.get("object_srt_symmetry_info_path")
         if not value:
             return None
-        path = resolve_local_path(value)
-        return path if path is not None and path.is_file() else None
+        path = Path(str(value)).expanduser()
+        if path.is_file():
+            return path
+        candidate = PROJECT_ROOT / str(value)
+        return candidate if candidate.is_file() else None
 
-    def _load_ov9d_split_records(self, split_json: Path) -> Dict[str, Dict]:
-        if not split_json.is_file():
-            raise FileNotFoundError(f"Split JSON not found: {split_json}")
-        payload = read_json(split_json)
-        records = {}
-        for item in payload.get("scenes", []):
-            scene_name = str(item["scene_name"])
-            scene_dir = self._resolve_scene_dir(item)
-            if not scene_dir.is_dir():
+    def _load_scene_records(self) -> Dict[str, Dict]:
+        if not self.data_root.is_dir():
+            raise FileNotFoundError(f"Google demo data root not found: {self.data_root}")
+        if not self.object_image_root.is_dir():
+            raise FileNotFoundError(f"Google demo object image root not found: {self.object_image_root}")
+
+        records: Dict[str, Dict] = {}
+        for scene_dir in sorted(p for p in self.data_root.iterdir() if p.is_dir() and p.name != "_object_images"):
+            rgb_dir = scene_dir / "rgb"
+            depth_dir = scene_dir / "depth"
+            mask_dir = scene_dir / "mask_visib"
+            scene_gt_path = scene_dir / "scene_gt.json"
+            scene_camera_path = scene_dir / "scene_camera.json"
+            scene_meta_path = scene_dir / "scene_meta.json"
+            object_dir = self.object_image_root / scene_dir.name
+            if not all(
+                [
+                    rgb_dir.is_dir(),
+                    depth_dir.is_dir(),
+                    mask_dir.is_dir(),
+                    scene_gt_path.is_file(),
+                    scene_camera_path.is_file(),
+                    scene_meta_path.is_file(),
+                    object_dir.is_dir(),
+                    (object_dir / "rgb").is_dir(),
+                ]
+            ):
                 continue
-            record = dict(item)
-            record["scene_dir"] = scene_dir
-            records[scene_name] = record
-        return records
 
-    def _resolve_scene_dir(self, item: Dict) -> Path:
-        relative_path = item.get("relative_path")
-        if relative_path:
-            candidate = self.dataset_root / str(relative_path)
-            if candidate.is_dir():
-                return candidate
-        scene_name = str(item["scene_name"])
-        for root in (self.ov9d_multi_root, self.ov9d_single_root):
-            candidate = root / scene_name
-            if candidate.is_dir():
-                return candidate
-        return self.ov9d_multi_root / scene_name
-
-    def scene_dir_for_name(self, scene_name: str) -> Path:
-        record = self.ov9d_all_scene_records.get(scene_name, {})
-        if "scene_dir" in record:
-            return Path(record["scene_dir"])
-        return self._resolve_scene_dir({"scene_name": scene_name})
-
-    def _build_ov9d_single_records_by_object_id(self) -> Dict[int, List[Dict]]:
-        records: Dict[int, List[Dict]] = {}
-        if self.object_image_root.is_dir():
-            for object_dir in sorted(p for p in self.object_image_root.iterdir() if p.is_dir()):
-                try:
-                    object_id = ov9d_object_id_from_key(object_dir.name)
-                except ValueError:
-                    continue
-                image_ids = [int(rgb_path.stem) for rgb_path in sorted((object_dir / "rgb").glob("*.png"))]
-                if all(view_id in image_ids for view_id in self.object_views):
-                    records.setdefault(int(object_id), []).append(
-                        {
-                            "scene_dir": object_dir,
-                            "scene_name": object_dir.name,
-                            "image_ids": image_ids,
-                            "object_instance": self.ov9d_oid_to_name.get(object_id, object_dir.name),
-                        }
-                    )
-            if records:
-                return records
-
-        for scene_dir in sorted(p for p in self.ov9d_single_root.iterdir() if p.is_dir()):
-            name_parts = scene_dir.name.split("_")
-            object_instance = "_".join(name_parts[:-1]) if len(name_parts) > 2 else scene_dir.name
-            object_id = self.ov9d_name_to_oid.get(object_instance)
-            if object_id is None:
+            scene_gt = read_json(scene_gt_path)
+            scene_camera = read_json(scene_camera_path)
+            scene_meta = read_json(scene_meta_path)
+            metadata = read_json(scene_dir / "metadata.json") if (scene_dir / "metadata.json").is_file() else {}
+            frame_ids = sorted(int(path.stem) for path in rgb_dir.glob("*.png"))
+            object_view_ids = sorted(int(path.stem) for path in (object_dir / "rgb").glob("*.png"))
+            if not frame_ids or not object_view_ids:
                 continue
-            image_ids = []
-            for rgb_path in sorted((scene_dir / "rgb").glob("*.png")):
-                image_id = int(rgb_path.stem)
-                if (scene_dir / "mask_visib" / f"{image_id:06d}_000000.png").is_file():
-                    image_ids.append(image_id)
-            if all(view_id in image_ids for view_id in self.object_views):
-                records.setdefault(int(object_id), []).append(
-                    {
-                        "scene_dir": scene_dir,
-                        "scene_name": scene_dir.name,
-                        "image_ids": image_ids,
-                        "object_instance": object_instance,
-                    }
+
+            first_key = str(frame_ids[0]) if str(frame_ids[0]) in scene_gt else next(iter(scene_gt))
+            first_gt = scene_gt[first_key][0]
+            first_meta = scene_meta[first_key][0] if isinstance(scene_meta[first_key], list) else scene_meta[first_key]
+            object_id = int(first_gt.get("obj_id", 1))
+            object_name = str(metadata.get("obj_name") or scene_dir.name)
+            default_object_views = [view_id for view_id in self.object_views if view_id in object_view_ids]
+            if len(default_object_views) != len(self.object_views):
+                default_object_views = object_view_ids[: min(len(object_view_ids), max(1, len(self.object_views)))]
+
+            records[scene_dir.name] = {
+                "scene_name": scene_dir.name,
+                "object_name": object_name,
+                "scene_dir": scene_dir,
+                "object_dir": object_dir,
+                "scene_gt": scene_gt,
+                "scene_camera": scene_camera,
+                "scene_meta": scene_meta,
+                "frame_ids": frame_ids,
+                "object_view_ids": object_view_ids,
+                "default_object_views": default_object_views,
+                "object_id": object_id,
+                "size_xyz": np.asarray(
+                    [first_meta.get("size_x", 100.0), first_meta.get("size_y", 100.0), first_meta.get("size_z", 100.0)],
+                    dtype=np.float32,
                 )
+                / 1000.0,
+            }
         return records
-
-    def _collect_train_object_ids(self) -> set[int]:
-        payload = read_json(DEFAULT_TRAIN_SPLIT_JSON)
-        object_ids = {int(item["object_id"]) for item in payload.get("scenes", []) if "object_id" in item}
-        return {oid for oid in object_ids if oid in self.ov9d_single_records_by_object_id}
-
-    def _ov9d_size(self, object_id: int) -> np.ndarray:
-        info = self.ov9d_models_info.get(str(int(object_id)), {})
-        return np.asarray(
-            [info.get("size_x", 100.0), info.get("size_y", 100.0), info.get("size_z", 100.0)],
-            dtype=np.float32,
-        ) / 1000.0
-
-    def _ov9d_axis_length(self, object_id: int) -> float:
-        return max(float(np.linalg.norm(self._ov9d_size(object_id))) * 0.25, 1e-3)
-
-    @property
-    def ov9d_split_choices(self) -> List[str]:
-        return ["eval", "train", "multi"]
-
-    def get_scene_choices(self, split_name: str | None = None) -> List[str]:
-        split = split_name if split_name in self.ov9d_split_records else self.default_split_name
-        return sorted(self.ov9d_split_records.get(split, {}))
-
-    def get_frame_choices(self, scene_name: str) -> List[str]:
-        scene_dir = self.scene_dir_for_name(scene_name)
-        if not (scene_dir / "scene_gt.json").is_file():
-            return []
-        return [f"{int(x):06d}" for x in sorted(int(k) for k in read_json(scene_dir / "scene_gt.json").keys())]
-
-    def _ov9d_scene_object_ids(self, scene_name: str) -> List[int]:
-        item = self.ov9d_all_scene_records.get(scene_name, {})
-        ids = [int(x) for x in item.get("object_ids", item.get("eligible_object_ids", []))]
-        if "object_id" in item:
-            ids.append(int(item["object_id"]))
-        ids = list(dict.fromkeys(ids))
-        return [oid for oid in ids if oid in self.ov9d_single_records_by_object_id]
-
-    def _ov9d_present_ids_for_frame(self, scene_name: str, frame_name: str) -> List[int]:
-        scene_gt = read_json(self.scene_dir_for_name(scene_name) / "scene_gt.json")
-        return [int(gt.get("obj_id", -1)) for gt in scene_gt[str(int(frame_name))]]
-
-    def _ov9d_absent_object_ids(self, scene_name: str, frame_name: str, count: int = 6) -> List[int]:
-        present = set(self._ov9d_present_ids_for_frame(scene_name, frame_name))
-        scene_ids = set(self._ov9d_scene_object_ids(scene_name))
-        candidates = sorted(
-            oid
-            for oid in self.ov9d_single_records_by_object_id
-            if oid not in present and oid not in scene_ids
-        )
-        rng = np.random.default_rng(abs(hash((scene_name, str(frame_name)))) % (2**32))
-        if len(candidates) > count:
-            candidates = [int(x) for x in rng.choice(np.asarray(candidates, dtype=np.int64), size=count, replace=False)]
-            candidates.sort()
-        return candidates
-
-    def ov9d_object_choices_for_frame(self, scene_name: str, frame_name: str):
-        if not scene_name or not frame_name:
-            return []
-        present = set(self._ov9d_present_ids_for_frame(scene_name, frame_name))
-        scene_ids = self._ov9d_scene_object_ids(scene_name)
-        absent_ids = self._ov9d_absent_object_ids(scene_name, frame_name)
-
-        def make_label(oid: int, tag: str) -> str:
-            train_marker = "🔴 " if oid in self.train_object_ids else ""
-            return f"{train_marker}[{tag}] {ov9d_object_display_name(oid, self.ov9d_oid_to_name)}"
-
-        choices = []
-        for oid in scene_ids:
-            tag = "present" if oid in present else "scene object, not this frame"
-            choices.append((make_label(oid, tag), ov9d_object_key(oid)))
-        for oid in absent_ids:
-            choices.append((make_label(oid, "absent random"), ov9d_object_key(oid)))
-        return choices
 
     def discover_checkpoints(self) -> List[str]:
         candidates = set()
@@ -1022,51 +898,76 @@ class OV9DDemoApp:
             str(self.checkpoint_path),
         )
 
-    def input_gallery(self, scene_name: str, frame_name: str, object_name: str):
-        image_id = int(frame_name)
-        object_id = ov9d_object_id_from_key(object_name)
-        scene_image = str(self.scene_dir_for_name(scene_name) / "rgb" / f"{image_id:06d}.png")
-        _, object_gallery = load_ov9d_object_tensor(
-            self.ov9d_single_records_by_object_id,
-            object_id,
-            self.object_views,
+    def scene_record(self, scene_name: str) -> Dict:
+        if scene_name not in self.scene_records:
+            raise KeyError(f"Unknown scene: {scene_name}")
+        return self.scene_records[scene_name]
+
+    def frame_choices(self, scene_name: str) -> List[str]:
+        return [f"{frame_id:06d}" for frame_id in self.scene_record(scene_name)["frame_ids"]]
+
+    def scene_preview(self, scene_name: str, frame_name: str) -> str | None:
+        if not scene_name or not frame_name:
+            return None
+        return str(self.scene_record(scene_name)["scene_dir"] / "rgb" / f"{int(frame_name):06d}.png")
+
+    def object_gallery(self, scene_name: str):
+        record = self.scene_record(scene_name)
+        _, gallery = load_object_tensor(
+            record,
+            record["default_object_views"],
             self.resolution,
             torch.device("cpu"),
         )
-        return scene_image, object_gallery
+        return gallery
+
+    def object_summary(self, scene_name: str) -> str:
+        record = self.scene_record(scene_name)
+        return "\n".join(
+            [
+                "### Object Reference",
+                f"- object: `{record['object_name']}`",
+                f"- object id: `{record['object_id']}`",
+                f"- object image dir: `{record['object_dir']}`",
+                f"- default object views: `{record['default_object_views']}`",
+            ]
+        )
+
+    def axis_length(self, scene_name: str) -> float:
+        size_xyz = self.scene_record(scene_name)["size_xyz"]
+        return max(float(np.linalg.norm(size_xyz)) * 0.25, 1e-3)
 
     def run_inference(
         self,
         scene_name: str,
         frame_name: str,
-        object_name: str,
         use_depth_input: bool,
         show_point_cloud_pose: bool,
         point_cloud_stride: int,
+        apply_pred_up_axis_90deg: bool = False,
     ):
-        object_id = ov9d_object_id_from_key(object_name)
+        record = self.scene_record(scene_name)
+        object_id = int(record["object_id"])
         image_id = int(frame_name)
         use_depth_input = bool(use_depth_input)
-        scene_dir = self.scene_dir_for_name(scene_name)
+        apply_pred_up_axis_90deg = bool(apply_pred_up_axis_90deg)
 
-        gts = read_json(scene_dir / "scene_gt.json")[str(image_id)]
+        gts = record["scene_gt"][str(image_id)]
         object_index = next(
-            (idx for idx, gt in enumerate(gts) if int(gt.get("obj_id", -1)) == int(object_id)),
+            (idx for idx, gt in enumerate(gts) if int(gt.get("obj_id", -1)) == object_id),
             None,
         )
         has_object = object_index is not None
 
-        scene_tensor, depth_tensor, mask_tensor, display_image, display_depth, gt_mask, intrinsic = load_ov9d_scene_frame_inputs(
-            scene_dir,
+        scene_tensor, depth_tensor, mask_tensor, display_image, display_depth, gt_mask, intrinsic = load_scene_frame_inputs(
+            record,
             image_id,
-            object_id,
             self.resolution,
             self.device,
         )
-        object_tensor, _ = load_ov9d_object_tensor(
-            self.ov9d_single_records_by_object_id,
-            object_id,
-            self.object_views,
+        object_tensor, _ = load_object_tensor(
+            record,
+            record["default_object_views"],
             self.resolution,
             self.device,
         )
@@ -1108,14 +1009,14 @@ class OV9DDemoApp:
         elif "object_size_log" in outputs:
             pred_size = np.exp(outputs["object_size_log"].reshape(-1, 3)[0].detach().float().cpu().numpy()).astype(np.float32)
 
-        pose_lines = [
+        lines = [
             "### Prediction Summary",
             f"- checkpoint: `{self.checkpoint_path}`",
             f"- scene: `{scene_name}`",
             f"- frame: `{image_id:06d}`",
-            f"- object: `{ov9d_object_display_name(object_id, self.ov9d_oid_to_name)}`",
-            f"- GT presence in this frame: `{bool(has_object)}`",
-            f"- predicted presence probability: `{presence_prob:.6f}` (logit `{presence_logit:.6f}`)",
+            f"- object: `{record['object_name']}`",
+            f"- GT presence in frame: `{bool(has_object)}`",
+            f"- predicted presence probability: `{presence_prob:.6f}`",
             f"- predicted present @0.5: `{bool(pred_present)}`",
             f"- use depth input: `{use_depth_input}`",
         ]
@@ -1123,21 +1024,21 @@ class OV9DDemoApp:
         if not has_object:
             point_cloud_glb = None
             if show_point_cloud_pose:
-                point_cloud_glb = export_ov9d_point_cloud_pose_glb(
+                point_cloud_glb = export_point_cloud_pose_glb(
                     scene_name,
                     f"{image_id:06d}",
                     display_image,
                     display_depth,
                     intrinsic,
-                    axis_length=self._ov9d_axis_length(object_id),
+                    axis_length=self.axis_length(scene_name),
                     point_cloud_stride=point_cloud_stride,
                 )
-            pose_lines += [
+            lines += [
                 "",
                 "### Presence-Only Result",
-                "- This object is not annotated in the selected frame, so pose metrics are skipped.",
+                "- This frame does not contain the selected object annotation, so pose metrics are skipped.",
             ]
-            return "\n".join(pose_lines), None, None, point_cloud_glb, pred_mask_image, gt_mask_image
+            return "\n".join(lines), None, None, point_cloud_glb, pred_mask_image, gt_mask_image
 
         if "object_pose" not in outputs or "object_translation" not in outputs:
             raise RuntimeError(f"Model output does not contain object pose keys: {sorted(outputs.keys())}")
@@ -1153,8 +1054,17 @@ class OV9DDemoApp:
             pred_rotation_cam = gt_rotation_cam
             pred_translation_cam = gt_translation_cam
 
+        # Optionally apply +90 deg post-rotation about the object's up axis
+        # (+Y) to the predicted rotation. When enabled this affects rotation
+        # error and the predicted bbox + axes drawing. GT is never rotated.
+        if apply_pred_up_axis_90deg:
+            post_rot = R_VIS_POST_ROT.astype(pred_rotation_cam.dtype)
+            pred_rotation_vis = pred_rotation_cam @ post_rot
+        else:
+            pred_rotation_vis = pred_rotation_cam
+
         rot_error_deg, sym_count = symmetric_rotation_error_degrees(
-            pred_rotation_cam,
+            pred_rotation_vis,
             gt_rotation_cam,
             object_id,
             self.symmetry_info_path,
@@ -1163,8 +1073,8 @@ class OV9DDemoApp:
         trans_error = translation_error(pred_translation_cam, gt_translation_cam)
         mask_score = mask_iou(pred_mask, gt_mask)
 
-        axis_length = self._ov9d_axis_length(object_id)
-        gt_size = self._ov9d_size(object_id)
+        axis_length = self.axis_length(scene_name)
+        gt_size = record["size_xyz"]
         raw_pred_size = pred_size if pred_size is not None else gt_size
         size_for_pred_box, size_was_clipped = clamp_predicted_size_for_bbox(raw_pred_size, gt_size)
         pred_bbox_obj = centered_axis_bbox_corners(size_for_pred_box)
@@ -1186,10 +1096,13 @@ class OV9DDemoApp:
             gt_translation_cam,
         )
 
+        # The predicted bbox + axes are drawn using pred_rotation_vis (computed
+        # above), which adds a +90 deg rotation about the object's up axis on
+        # top of the model output. GT is drawn with its native rotation.
         pred_image = draw_bbox_axes_overlay_on_image(
             display_image,
             intrinsic,
-            pred_rotation_cam,
+            pred_rotation_vis,
             pred_translation_cam,
             pred_bbox_obj,
             axis_length,
@@ -1209,13 +1122,13 @@ class OV9DDemoApp:
 
         point_cloud_glb = None
         if show_point_cloud_pose:
-            point_cloud_glb = export_ov9d_point_cloud_pose_glb(
+            point_cloud_glb = export_point_cloud_pose_glb(
                 scene_name,
                 f"{image_id:06d}",
                 display_image,
                 display_depth,
                 intrinsic,
-                pred_rotation_cam=pred_rotation_cam,
+                pred_rotation_cam=pred_rotation_vis,
                 pred_translation_cam=pred_translation_cam,
                 pred_bbox_obj=pred_bbox_obj,
                 gt_rotation_cam=gt_rotation_cam,
@@ -1226,7 +1139,7 @@ class OV9DDemoApp:
             )
 
         size_error = translation_error(raw_pred_size, gt_size)
-        pose_lines += [
+        lines += [
             "",
             "### Predicted Pose",
             f"- camera-frame translation (m): `{np.round(pred_translation_cam, 6).tolist()}`",
@@ -1260,16 +1173,13 @@ class OV9DDemoApp:
             ),
             f"- mask IoU @0.5: `{mask_score:.6f}`" if mask_score is not None else "- mask IoU @0.5: `N/A`",
         ]
-        return "\n".join(pose_lines), pred_image, gt_image, point_cloud_glb, pred_mask_image, gt_mask_image
+        return "\n".join(lines), pred_image, gt_image, point_cloud_glb, pred_mask_image, gt_mask_image
 
 
-def build_demo(app: OV9DDemoApp):
-    default_split = app.default_split_name
-    default_scene = app.get_scene_choices(default_split)[0]
-    default_frames = app.get_frame_choices(default_scene)
+def build_demo(app: GoogleDemoApp):
+    default_scene = app.scene_choices[0]
+    default_frames = app.frame_choices(default_scene)
     default_frame = default_frames[0] if default_frames else None
-    default_object_choices = app.ov9d_object_choices_for_frame(default_scene, default_frame)
-    default_object = default_object_choices[0][1] if default_object_choices else None
 
     demo_css = """
     .gradio-container { max-width: 100% !important; }
@@ -1288,23 +1198,22 @@ def build_demo(app: OV9DDemoApp):
 
     info_markdown = "\n".join(
         [
-            "# OmniVGGT 6D Pose Demo (OV9D Splits Only)",
+            "# OmniVGGT 6D Pose Demo (Google Only)",
             f"- config: `{app.config_path}`",
-            f"- dataset: `{app.dataset_root}`",
-            f"- object references: `{app.object_image_root}`",
+            f"- google demo root: `{app.google_demo_root}`",
+            f"- data root: `{app.data_root}`",
+            f"- object image root: `{app.object_image_root}`",
             f"- loaded checkpoint: `{app.checkpoint_path}`",
-            f"- eval split: `{DEFAULT_EVAL_SPLIT_JSON}`",
-            f"- train split: `{DEFAULT_TRAIN_SPLIT_JSON}`",
-            f"- multi split: `{DEFAULT_MULTI_SPLIT_JSON}`",
             f"- object views: `{app.object_views}`",
             f"- inference resolution: `{app.resolution}`",
             "",
-            "這個頁面只保留 `splits_ov9d_seen_unseen_scene` 的 `eval`、`train`、`multi` 三種資料。",
-            "scene/frame/object 都會從這三份 split 對應的 OV9D scene 中載入。",
+            "這個頁面只保留 Google demo。",
+            "支援兩種目錄格式：`<root>/data/<scene>/rgb` 或 `<root>/<scene>/rgb`。",
+            "object reference 對應 `<data_root>/_object_images/<scene>/rgb`。",
         ]
     )
 
-    with gr.Blocks(title="OmniVGGT OV9D Demo", css=demo_css) as demo:
+    with gr.Blocks(title="OmniVGGT Google Demo", css=demo_css) as demo:
         gr.Markdown(info_markdown)
 
         checkpoint_status = gr.Markdown(f"Loaded checkpoint: `{app.checkpoint_path}`")
@@ -1323,12 +1232,14 @@ def build_demo(app: OV9DDemoApp):
             load_model_button = gr.Button("Load Model")
 
         with gr.Row():
-            split_dropdown = gr.Dropdown(choices=app.ov9d_split_choices, value=default_split, label="Split")
-            scene_dropdown = gr.Dropdown(choices=app.get_scene_choices(default_split), value=default_scene, label="Scene")
+            scene_dropdown = gr.Dropdown(choices=app.scene_choices, value=default_scene, label="Scene")
             frame_dropdown = gr.Dropdown(choices=default_frames, value=default_frame, label="Frame")
-            object_dropdown = gr.Dropdown(choices=default_object_choices, value=default_object, label="Object")
             use_depth_checkbox = gr.Checkbox(value=True, label="Use Depth Input")
             show_point_cloud_checkbox = gr.Checkbox(value=False, label="Show Point Cloud Pose")
+            apply_pred_up_axis_90deg_checkbox = gr.Checkbox(
+                value=False,
+                label="Apply +90 deg about up axis to pred",
+            )
             point_cloud_stride_slider = gr.Slider(
                 minimum=1,
                 maximum=8,
@@ -1341,6 +1252,7 @@ def build_demo(app: OV9DDemoApp):
 
         with gr.Row(equal_height=False):
             with gr.Column(scale=1):
+                object_summary_markdown = gr.Markdown(app.object_summary(default_scene))
                 scene_input_image = compat_image(
                     label="Scene Input (RGB)",
                     height=360,
@@ -1349,7 +1261,7 @@ def build_demo(app: OV9DDemoApp):
                 )
                 object_input_gallery = gr.Gallery(
                     label="Object Inputs",
-                    columns=max(len(app.object_views), 1),
+                    columns=max(len(app.scene_record(default_scene)["default_object_views"]), 1),
                     height=180,
                     elem_id="object_inputs",
                     preview=False,
@@ -1395,82 +1307,28 @@ def build_demo(app: OV9DDemoApp):
                         show_download_button=False,
                     )
 
-        def refresh_inputs(scene_name, frame_name, object_name):
-            if not scene_name or not frame_name or not object_name:
-                return None, []
-            return app.input_gallery(scene_name, frame_name, object_name)
-
-        def refresh_split_controls(
-            split_name: str,
-            preferred_scene: str | None = None,
-            preferred_frame: str | None = None,
-            preferred_object: str | None = None,
-        ):
-            scenes = app.get_scene_choices(split_name)
-            scene_value = preferred_scene if preferred_scene in scenes else (scenes[0] if scenes else None)
-            frames = app.get_frame_choices(scene_value) if scene_value else []
-            frame_value = preferred_frame if preferred_frame in frames else (frames[0] if frames else None)
-            object_choices = app.ov9d_object_choices_for_frame(scene_value, frame_value) if scene_value and frame_value else []
-            object_values = [value for _, value in object_choices]
-            object_value = preferred_object if preferred_object in object_values else (object_values[0] if object_values else None)
-            scene_image, object_gallery = refresh_inputs(scene_value, frame_value, object_value)
-            return (
-                gr.update(choices=scenes, value=scene_value),
-                gr.update(choices=frames, value=frame_value),
-                gr.update(choices=object_choices, value=object_value),
-                scene_image,
-                object_gallery,
-            )
-
-        def refresh_scene_controls(scene_name: str, preferred_frame: str | None = None, preferred_object: str | None = None):
-            frames = app.get_frame_choices(scene_name)
-            frame_value = preferred_frame if preferred_frame in frames else (frames[0] if frames else None)
-            object_choices = app.ov9d_object_choices_for_frame(scene_name, frame_value) if frame_value else []
-            object_values = [value for _, value in object_choices]
-            object_value = preferred_object if preferred_object in object_values else (object_values[0] if object_values else None)
-            return gr.update(choices=frames, value=frame_value), gr.update(choices=object_choices, value=object_value)
-
-        def refresh_frame_controls(scene_name: str, frame_name: str, preferred_object: str | None = None):
-            if not (scene_name and frame_name):
-                return gr.update()
-            object_choices = app.ov9d_object_choices_for_frame(scene_name, frame_name)
-            object_values = [value for _, value in object_choices]
-            object_value = preferred_object if preferred_object in object_values else (object_values[0] if object_values else None)
-            return gr.update(choices=object_choices, value=object_value)
-
         def sync_checkpoint_path(selected_value: str):
             return selected_value
 
-        split_dropdown.change(
-            refresh_split_controls,
-            inputs=[split_dropdown, scene_dropdown, frame_dropdown, object_dropdown],
-            outputs=[scene_dropdown, frame_dropdown, object_dropdown, scene_input_image, object_input_gallery],
-        )
+        def refresh_scene(scene_name: str):
+            frames = app.frame_choices(scene_name)
+            frame_value = frames[0] if frames else None
+            return (
+                gr.update(choices=frames, value=frame_value),
+                app.scene_preview(scene_name, frame_value) if frame_value else None,
+                app.object_gallery(scene_name),
+                app.object_summary(scene_name),
+            )
+
+        def refresh_frame(scene_name: str, frame_name: str):
+            return app.scene_preview(scene_name, frame_name)
+
         scene_dropdown.change(
-            refresh_scene_controls,
-            inputs=[scene_dropdown, frame_dropdown, object_dropdown],
-            outputs=[frame_dropdown, object_dropdown],
+            refresh_scene,
+            inputs=scene_dropdown,
+            outputs=[frame_dropdown, scene_input_image, object_input_gallery, object_summary_markdown],
         )
-        scene_dropdown.change(
-            refresh_inputs,
-            inputs=[scene_dropdown, frame_dropdown, object_dropdown],
-            outputs=[scene_input_image, object_input_gallery],
-        )
-        frame_dropdown.change(
-            refresh_frame_controls,
-            inputs=[scene_dropdown, frame_dropdown, object_dropdown],
-            outputs=object_dropdown,
-        )
-        frame_dropdown.change(
-            refresh_inputs,
-            inputs=[scene_dropdown, frame_dropdown, object_dropdown],
-            outputs=[scene_input_image, object_input_gallery],
-        )
-        object_dropdown.change(
-            refresh_inputs,
-            inputs=[scene_dropdown, frame_dropdown, object_dropdown],
-            outputs=[scene_input_image, object_input_gallery],
-        )
+        frame_dropdown.change(refresh_frame, inputs=[scene_dropdown, frame_dropdown], outputs=scene_input_image)
         checkpoint_dropdown.change(sync_checkpoint_path, inputs=checkpoint_dropdown, outputs=checkpoint_textbox)
         load_model_button.click(
             app.load_checkpoint,
@@ -1479,24 +1337,34 @@ def build_demo(app: OV9DDemoApp):
         )
         infer_button.click(
             app.run_inference,
-            inputs=[scene_dropdown, frame_dropdown, object_dropdown, use_depth_checkbox, show_point_cloud_checkbox, point_cloud_stride_slider],
+            inputs=[
+                scene_dropdown,
+                frame_dropdown,
+                use_depth_checkbox,
+                show_point_cloud_checkbox,
+                point_cloud_stride_slider,
+                apply_pred_up_axis_90deg_checkbox,
+            ],
             outputs=[summary_markdown, pred_image, gt_image, point_cloud_model, pred_mask_image, gt_mask_image],
         )
-        if default_object is not None and default_frame is not None:
+        if default_frame is not None:
             demo.load(
-                refresh_inputs,
-                inputs=[scene_dropdown, frame_dropdown, object_dropdown],
-                outputs=[scene_input_image, object_input_gallery],
+                lambda: (
+                    app.scene_preview(default_scene, default_frame),
+                    app.object_gallery(default_scene),
+                    app.object_summary(default_scene),
+                ),
+                outputs=[scene_input_image, object_input_gallery, object_summary_markdown],
             )
+
     return demo
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Gradio demo for OmniVGGT 6D pose inference on OV9D split data")
+    parser = argparse.ArgumentParser(description="Gradio demo for OmniVGGT 6D pose inference on Google demo data")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     parser.add_argument("--checkpoint", type=str, default=None)
-    parser.add_argument("--dataset-root", type=Path, default=DEFAULT_DATASET_ROOT)
-    parser.add_argument("--object-image-root", type=Path, default=DEFAULT_OBJECT_IMAGE_ROOT)
+    parser.add_argument("--google-demo-root", type=Path, default=DEFAULT_GOOGLE_DEMO_ROOT)
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=7860)
     parser.add_argument("--share", action="store_true")
@@ -1504,11 +1372,10 @@ def main():
     args = parser.parse_args()
 
     os.chdir(PROJECT_ROOT)
-    app = OV9DDemoApp(
+    app = GoogleDemoApp(
         config_path=args.config,
         checkpoint_path=args.checkpoint,
-        dataset_root=args.dataset_root,
-        object_image_root=args.object_image_root,
+        google_demo_root=args.google_demo_root,
         use_gt_pose_for_prediction=args.use_gt_pose_for_prediction,
     )
     demo = build_demo(app)
@@ -1516,7 +1383,7 @@ def main():
         server_name=args.host,
         server_port=args.port,
         share=args.share,
-        allowed_paths=[str(app.dataset_root), str(app.object_image_root)],
+        allowed_paths=[str(app.google_demo_root), str(app.object_image_root)],
     )
 
 
