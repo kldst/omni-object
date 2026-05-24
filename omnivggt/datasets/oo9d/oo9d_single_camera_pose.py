@@ -215,6 +215,9 @@ class OO9DSingleCameraPose(OO9DCameraPoseBase):
 
     def __getitem__(self, idx):
         sample = super().__getitem__(idx)
+        object_id = int(np.asarray(sample["object_id"]).item())
+        candidates = self.single_records_by_object_id.get(object_id, [])
+        sample["category"] = candidates[0].get("category", "") if candidates else ""
         depth = np.asarray(sample["depth"], dtype=np.float32)
         valid_mask = np.asarray(sample["valid_mask"], dtype=np.bool_)
         valid_depth = depth[..., 0][valid_mask]

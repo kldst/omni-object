@@ -65,12 +65,9 @@ def get_data_loader(dataset, batch_size, num_workers=8,
             drop_last=drop_last,
         )
     except (AttributeError, NotImplementedError):
-        # not avail for this dataset
-        if torch.distributed.is_initialized():
-            sampler = torch.utils.data.DistributedSampler(
-                dataset, num_replicas=world_size, rank=rank, shuffle=shuffle, drop_last=drop_last
-            )
-        elif shuffle:
+        # Accelerate.prepare() will own distributed sharding; avoid sharding
+        # here too or steps/epoch get divided by world_size twice.
+        if shuffle:
             sampler = torch.utils.data.RandomSampler(dataset)
         else:
             sampler = torch.utils.data.SequentialSampler(dataset)
