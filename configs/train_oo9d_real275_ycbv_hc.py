@@ -18,7 +18,7 @@ checkpointing_steps = 2000
 
 # Model
 # model_url = "/all_data/model.safetensors"
-model_url = "/omni-object_clone_0520/outputs/oo9d_camera_pose_mask_presence_0521_norm_translate/checkpoint-12-12000"
+model_url = "/omni-object_clone_0520/outputs/oo9d_camera_pose_mask_presence_0521_norm_translate/checkpoint-12-12000/model.safetensors"
 model_load_strict = False
 model_requires_grad = False
 patch_embed_freeze = True
