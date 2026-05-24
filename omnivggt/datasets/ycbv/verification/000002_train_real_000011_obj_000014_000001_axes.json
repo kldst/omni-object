@@ -1,0 +1,169 @@
+{
+  "idx": 2,
+  "scene_source": "train_real",
+  "scene_name": "000011",
+  "image_id": 1,
+  "object_name": "obj_000014",
+  "object_id": 14,
+  "category": "mug",
+  "scene_rgb_path": "/mnt/train-data-4-hdd/yian/freepose/datasets_real/ycbv/train_real/000011/rgb/000001.png",
+  "scene_gt_path": "/mnt/train-data-4-hdd/yian/freepose/datasets_real/ycbv/train_real/000011/scene_gt.json",
+  "scene_mask_path": "/mnt/train-data-4-hdd/yian/freepose/datasets_real/ycbv/train_real/000011/mask_visib/000001_000002.png",
+  "object_rgb_paths": [
+    "/mnt/train-data-4-hdd/yian/freepose/datasets_real/ycbv/ycbv_aligned_object_refs/obj_000014/rgb/000001.png",
+    "/mnt/train-data-4-hdd/yian/freepose/datasets_real/ycbv/ycbv_aligned_object_refs/obj_000014/rgb/000005.png",
+    "/mnt/train-data-4-hdd/yian/freepose/datasets_real/ycbv/ycbv_aligned_object_refs/obj_000014/rgb/000010.png",
+    "/mnt/train-data-4-hdd/yian/freepose/datasets_real/ycbv/ycbv_aligned_object_refs/obj_000014/rgb/000015.png"
+  ],
+  "intrinsic": [
+    [
+      1156.048095703125,
+      0.0,
+      259.02764892578125
+    ],
+    [
+      0.0,
+      1156.8165283203125,
+      259.3787536621094
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "object_rotation_aligned_to_cam": [
+    [
+      -0.9884863495826721,
+      0.0381290540099144,
+      0.14642764627933502
+    ],
+    [
+      -0.11298994719982147,
+      -0.8296551704406738,
+      -0.5467227697372437
+    ],
+    [
+      0.10063798725605011,
+      -0.5569733381271362,
+      0.824409544467926
+    ]
+  ],
+  "object_rotation_native_to_cam": [
+    [
+      -0.14642764627933502,
+      0.9884863495826721,
+      0.0381290540099144
+    ],
+    [
+      0.5467227697372437,
+      0.11298994719982147,
+      -0.8296551704406738
+    ],
+    [
+      -0.824409544467926,
+      -0.10063798725605011,
+      -0.5569733381271362
+    ]
+  ],
+  "R_align_ycbv_to_ov9d": [
+    [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ],
+    [
+      -1.0,
+      0.0,
+      0.0
+    ]
+  ],
+  "object_translation_metric": [
+    0.06793153285980225,
+    0.10928145796060562,
+    0.9568769335746765
+  ],
+  "object_size_aligned": [
+    0.09307499974966049,
+    0.08138400316238403,
+    0.11696600168943405
+  ],
+  "object_size_native": [
+    0.11696600168943405,
+    0.09307499974966049,
+    0.08138400316238403
+  ],
+  "bbox_corner_pixels": [
+    [
+      388.5474853515625,
+      484.4317321777344
+    ],
+    [
+      273.6198425292969,
+      469.1822204589844
+    ],
+    [
+      399.2795104980469,
+      407.379150390625
+    ],
+    [
+      278.39007568359375,
+      392.163818359375
+    ],
+    [
+      395.6929931640625,
+      390.9119567871094
+    ],
+    [
+      291.4345703125,
+      377.9351501464844
+    ],
+    [
+      405.6978454589844,
+      317.12286376953125
+    ],
+    [
+      296.556884765625,
+      304.2503662109375
+    ]
+  ],
+  "bbox_corner_valid": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+  ],
+  "axis_pixels": [
+    [
+      341.09893798828125,
+      391.4945983886719
+    ],
+    [
+      250.37281799316406,
+      380.1435852050781
+    ],
+    [
+      348.5635070800781,
+      317.8241271972656
+    ],
+    [
+      348.6764831542969,
+      336.21044921875
+    ]
+  ],
+  "axis_valid": [
+    true,
+    true,
+    true,
+    true
+  ]
+}

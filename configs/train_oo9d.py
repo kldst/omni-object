@@ -5,7 +5,7 @@
 # accelerate launch --num_processes=1 train_omnivggt.py --config configs/train_oo9d.py
 
 output_dir = "outputs"
-exp_name = "oo9d_camera_pose_mask_presence_0521_norm_translate"
+exp_name = "0521_oo9d_camera_pose__norm_translate"
 logging_dir = "logs"
 
 wandb = True

@@ -162,14 +162,32 @@ def _load_symmetry_info(path: str, continuous_steps: int):
             for step in range(1, int(continuous_steps)):
                 angle = 2.0 * math.pi * float(step) / float(continuous_steps)
                 rotations.append(axis_angle_to_matrix(axis, angle))
-        out[int(object_id)] = torch.stack(rotations, dim=0)
+        try:
+            key = int(object_id)
+        except (TypeError, ValueError):
+            key = str(object_id)
+        out[key] = torch.stack(rotations, dim=0)
     return out
+
+
+def _labels_to_list(labels, count: int):
+    if labels is None:
+        return [None] * count
+    if isinstance(labels, str):
+        return [labels] * count
+    if isinstance(labels, (tuple, list)):
+        return list(labels)
+    if hasattr(labels, "tolist"):
+        values = labels.tolist()
+        return values if isinstance(values, list) else [values]
+    return [labels] * count
 
 
 def _symmetric_rot6d_loss(
     pred_pose: torch.Tensor,
     gt_rot: torch.Tensor,
     object_ids: torch.Tensor,
+    dataset_labels,
     loss_type: str,
     symmetry_info_path: str,
     symmetry_continuous_steps: int,
@@ -180,8 +198,15 @@ def _symmetric_rot6d_loss(
     symmetry_info = _load_symmetry_info(str(symmetry_info_path), int(symmetry_continuous_steps))
     losses = []
     object_ids_cpu = object_ids.detach().cpu().reshape(-1).tolist()
+    dataset_labels = _labels_to_list(dataset_labels, len(object_ids_cpu))
     for sample_idx, object_id in enumerate(object_ids_cpu):
-        sym_rots = symmetry_info.get(int(object_id))
+        object_id = int(object_id)
+        dataset_label = dataset_labels[sample_idx] if sample_idx < len(dataset_labels) else None
+        sym_rots = None
+        if dataset_label is not None:
+            sym_rots = symmetry_info.get(f"{dataset_label}:{object_id}")
+        if sym_rots is None:
+            sym_rots = symmetry_info.get(object_id)
         if sym_rots is None:
             candidates = _rotation_matrix_to_rot6d(gt_rot[sample_idx : sample_idx + 1])
         else:
@@ -258,8 +283,15 @@ def compute_object_srt_loss(
         object_ids = batch.get("object_id", None)
         if object_ids is not None:
             object_ids = object_ids[valid_mask]
+        dataset_labels = batch.get("dataset", None)
+        if dataset_labels is not None:
+            valid_list = valid_mask.detach().cpu().reshape(-1).tolist()
+            dataset_labels = [
+                label for label, is_valid in zip(_labels_to_list(dataset_labels, len(valid_list)), valid_list) if is_valid
+            ]
     else:
         object_ids = batch.get("object_id", None)
+        dataset_labels = batch.get("dataset", None)
 
     if pose_rep == "symmetric_rot6d":
         if object_ids is None:
@@ -269,6 +301,7 @@ def compute_object_srt_loss(
                 pred_pose,
                 gt_rot,
                 object_ids,
+                dataset_labels,
                 loss_type=loss_type,
                 symmetry_info_path=symmetry_info_path,
                 symmetry_continuous_steps=symmetry_continuous_steps,

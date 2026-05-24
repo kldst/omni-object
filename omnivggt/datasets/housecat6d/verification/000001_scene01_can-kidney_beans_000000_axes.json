@@ -1,0 +1,169 @@
+{
+  "idx": 1,
+  "scene_name": "scene01",
+  "image_id": 0,
+  "object_name": "can-kidney_beans",
+  "object_id": 20,
+  "class_id": 3,
+  "category": "can",
+  "scene_rgb_path": "/mnt/train-data-4-hdd/yian/freepose/housecat6d/scene01/rgb/000000.png",
+  "scene_label_path": "/mnt/train-data-4-hdd/yian/freepose/housecat6d/scene01/labels/000000_label.pkl",
+  "scene_mask_path": "/mnt/train-data-4-hdd/yian/freepose/housecat6d/scene01/instance/000000_can-kidney_beans.png",
+  "object_rgb_paths": [
+    "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs/can-kidney_beans/rgb/000001.png",
+    "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs/can-kidney_beans/rgb/000005.png",
+    "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs/can-kidney_beans/rgb/000010.png",
+    "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs/can-kidney_beans/rgb/000015.png"
+  ],
+  "intrinsic": [
+    [
+      435.0398254394531,
+      0.0,
+      258.8840637207031
+    ],
+    [
+      0.0,
+      433.5301513671875,
+      259.0596008300781
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "object_rotation_aligned_to_cam": [
+    [
+      0.17694249749183655,
+      0.0661398321390152,
+      -0.9819963574409485
+    ],
+    [
+      -0.6865620613098145,
+      0.723192572593689,
+      -0.07500045001506805
+    ],
+    [
+      0.7052119374275208,
+      0.6874722242355347,
+      0.17337259650230408
+    ]
+  ],
+  "object_rotation_native_to_cam": [
+    [
+      0.17694249749183655,
+      0.0661398321390152,
+      -0.9819963574409485
+    ],
+    [
+      -0.6865620613098145,
+      0.723192572593689,
+      -0.07500045001506805
+    ],
+    [
+      0.7052119374275208,
+      0.6874722242355347,
+      0.17337259650230408
+    ]
+  ],
+  "R_align_housecat6d_to_ov9d": [
+    [
+      1.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      1.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "object_translation_metric": [
+    -0.08980962634086609,
+    0.04930960386991501,
+    0.4492020308971405
+  ],
+  "object_size_aligned": [
+    0.0880960002541542,
+    0.09209500253200531,
+    0.09044399857521057
+  ],
+  "object_size_native": [
+    0.0880960002541542,
+    0.09209500253200531,
+    0.09044399857521057
+  ],
+  "bbox_corner_pixels": [
+    [
+      194.26576232910156,
+      315.89739990234375
+    ],
+    [
+      218.75904846191406,
+      248.39602661132812
+    ],
+    [
+      209.51856994628906,
+      373.0878601074219
+    ],
+    [
+      229.05563354492188,
+      307.0161437988281
+    ],
+    [
+      98.8487319946289,
+      306.1794128417969
+    ],
+    [
+      135.48760986328125,
+      242.31961059570312
+    ],
+    [
+      126.77963256835938,
+      362.7547302246094
+    ],
+    [
+      155.616943359375,
+      299.9114074707031
+    ]
+  ],
+  "bbox_corner_valid": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+  ],
+  "axis_pixels": [
+    [
+      171.90589904785156,
+      306.64886474609375
+    ],
+    [
+      188.75469970703125,
+      266.3031921386719
+    ],
+    [
+      182.71820068359375,
+      340.92962646484375
+    ],
+    [
+      118.22498321533203,
+      301.3390197753906
+    ]
+  ],
+  "axis_valid": [
+    true,
+    true,
+    true,
+    true
+  ]
+}

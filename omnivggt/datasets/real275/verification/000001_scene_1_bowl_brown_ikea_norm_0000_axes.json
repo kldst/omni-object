@@ -1,0 +1,172 @@
+{
+  "idx": 1,
+  "scene_name": "scene_1",
+  "image_id": 0,
+  "object_name": "bowl_brown_ikea_norm",
+  "object_id": 5,
+  "inst_id": 2,
+  "class_id": 2,
+  "category": "bowl",
+  "scene_rgb_path": "/mnt/train-data-4-hdd/yian/freepose/real275/real_train/scene_1/0000_color.png",
+  "scene_depth_path": "/mnt/train-data-4-hdd/yian/freepose/real275/real_train/scene_1/0000_depth.png",
+  "scene_gt_path": "/mnt/train-data-4-hdd/yian/freepose/real275/gts/real_train_umeyama/results_real_train_scene_1_0000.pkl",
+  "scene_mask_path": "/mnt/train-data-4-hdd/yian/freepose/real275/real_train/scene_1/0000_mask.png",
+  "object_rgb_paths": [
+    "/mnt/train-data-4-hdd/yian/freepose/real275/real275_aligned_object_refs/bowl_brown_ikea_norm/rgb/000001.png",
+    "/mnt/train-data-4-hdd/yian/freepose/real275/real275_aligned_object_refs/bowl_brown_ikea_norm/rgb/000005.png",
+    "/mnt/train-data-4-hdd/yian/freepose/real275/real275_aligned_object_refs/bowl_brown_ikea_norm/rgb/000010.png",
+    "/mnt/train-data-4-hdd/yian/freepose/real275/real275_aligned_object_refs/bowl_brown_ikea_norm/rgb/000015.png"
+  ],
+  "intrinsic": [
+    [
+      648.6112060546875,
+      0.0,
+      259.0274353027344
+    ],
+    [
+      0.0,
+      647.68408203125,
+      259.1703796386719
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "object_rotation_aligned_to_cam": [
+    [
+      0.17205610871315002,
+      -0.02730461023747921,
+      -0.9847086668014526
+    ],
+    [
+      0.4724881649017334,
+      -0.874840259552002,
+      0.10681499540805817
+    ],
+    [
+      -0.864379346370697,
+      -0.4836413562297821,
+      -0.13762050867080688
+    ]
+  ],
+  "object_rotation_native_to_cam": [
+    [
+      0.17205610871315002,
+      -0.02730461023747921,
+      -0.9847086668014526
+    ],
+    [
+      0.4724881649017334,
+      -0.874840259552002,
+      0.10681499540805817
+    ],
+    [
+      -0.864379346370697,
+      -0.4836413562297821,
+      -0.13762050867080688
+    ]
+  ],
+  "R_align_real275_to_ov9d": [
+    [
+      1.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      1.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "object_translation_metric": [
+    -0.22276753187179565,
+    0.04712117835879326,
+    1.1727145910263062
+  ],
+  "object_size_aligned": [
+    0.15979427099227905,
+    0.05748696252703667,
+    0.14937840402126312
+  ],
+  "object_size_native": [
+    0.15979427099227905,
+    0.05748696252703667,
+    0.14937840402126312
+  ],
+  "rmse_m": 0.004343340639024973,
+  "bbox_corner_pixels": [
+    [
+      175.9334716796875,
+      272.748046875
+    ],
+    [
+      181.568603515625,
+      317.76898193359375
+    ],
+    [
+      173.2453155517578,
+      246.74497985839844
+    ],
+    [
+      178.68533325195312,
+      289.6387939453125
+    ],
+    [
+      97.9543228149414,
+      281.27020263671875
+    ],
+    [
+      93.96684265136719,
+      328.1900329589844
+    ],
+    [
+      93.44013977050781,
+      255.022705078125
+    ],
+    [
+      88.77237701416016,
+      299.7925720214844
+    ]
+  ],
+  "bbox_corner_valid": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+  ],
+  "axis_pixels": [
+    [
+      135.8179931640625,
+      285.1951599121094
+    ],
+    [
+      136.3069305419922,
+      316.7039794921875
+    ],
+    [
+      128.66526794433594,
+      233.92889404296875
+    ],
+    [
+      77.03117370605469,
+      291.7193298339844
+    ]
+  ],
+  "axis_valid": [
+    true,
+    true,
+    true,
+    true
+  ]
+}

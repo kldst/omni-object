@@ -28,6 +28,18 @@ OO9DCameraPose = import_module("omnivggt.datasets.oo9d.oo9d_camera_pose").OO9DCa
 OO9DGeneratedMultiCameraPose = import_module(
     "omnivggt.datasets.oo9d.oo9d_multi_camera_pose"
 ).OO9DGeneratedMultiCameraPose
+OO9DSingleCameraPose = import_module(
+    "omnivggt.datasets.oo9d.oo9d_single_camera_pose"
+).OO9DSingleCameraPose
+HouseCat6DCameraPose = import_module(
+    "omnivggt.datasets.housecat6d.housecat6d_camera_pose"
+).HouseCat6DCameraPose
+YCBVCameraPose = import_module(
+    "omnivggt.datasets.ycbv.ycbv_camera_pose"
+).YCBVCameraPose
+Real275CameraPose = import_module(
+    "omnivggt.datasets.real275.real275_camera_pose"
+).Real275CameraPose
 
 from omnivggt.datasets.utils.transforms import ImgNorm, ColorJitter
 
