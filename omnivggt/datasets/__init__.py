@@ -43,11 +43,36 @@ Real275CameraPose = import_module(
 
 from omnivggt.datasets.utils.transforms import ImgNorm, ColorJitter
 
+
+def _intersection_collate(batch):
+    """Collate dict samples by intersecting keys across the batch.
+
+    When ConcatDataset mixes datasets that return slightly different dict keys
+    (e.g. R_align_ycbv_to_ov9d only exists for YCBV samples), default_collate
+    raises KeyError on the diverging keys. We collate only the keys present in
+    every sample so per-dataset metadata is silently dropped instead of crashing.
+    """
+    import torch
+    from torch.utils.data._utils.collate import default_collate
+
+    if not batch:
+        return default_collate(batch)
+    if not isinstance(batch[0], dict):
+        return default_collate(batch)
+    common_keys = set(batch[0].keys())
+    for sample in batch[1:]:
+        common_keys.intersection_update(sample.keys())
+    if not common_keys:
+        return {}
+    filtered = [{k: sample[k] for k in common_keys} for sample in batch]
+    return default_collate(filtered)
+
+
 def get_data_loader(dataset, batch_size, num_workers=8,
                     shuffle=True, drop_last=True, pin_mem=True):
     import torch
     from omnivggt.datasets.utils.misc import get_world_size, get_rank
-    
+
     world_size = get_world_size()
     rank = get_rank()
     if isinstance(dataset, str):
@@ -80,6 +105,7 @@ def get_data_loader(dataset, batch_size, num_workers=8,
         pin_memory=pin_mem,
         persistent_workers=False,
         drop_last=drop_last,
-        )   
+        collate_fn=_intersection_collate,
+        )
     
     return data_loader
