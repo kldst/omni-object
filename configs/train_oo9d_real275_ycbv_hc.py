@@ -120,8 +120,8 @@ object_srt_symmetry_info_path = "/omni-object_clone_real/mixed_symmetry_info.jso
 object_srt_symmetry_continuous_steps = 72
 
 # Dataset
-train_batch_images = 1
-val_batch_images = 1
+train_batch_images = 60
+val_batch_images = 60
 val_epoch_freq = 10
 num_workers = 0
 resolution = (518, 476)
