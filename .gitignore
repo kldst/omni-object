@@ -156,3 +156,5 @@ skyseg.onnx
 
 omnivggt_pretrain_model/
 omnivggt/datasets/oo9d/debug_pose_overlays/
+/gif_outputs/
+/verify_out/

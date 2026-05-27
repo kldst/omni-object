@@ -123,8 +123,11 @@ class HouseCat6DCameraPose(BaseStereoViewDataset):
         return np.loadtxt(path, dtype=np.float32).reshape(shape)
 
     @staticmethod
-    def _read_binary_mask(mask_path: Path) -> np.ndarray:
-        return (np.asarray(Image.open(mask_path).convert("L"), dtype=np.uint8) > 0).astype(np.float32)
+    def _read_binary_mask(mask_path: Path, instance_id: Optional[int] = None) -> np.ndarray:
+        raw = np.asarray(Image.open(mask_path).convert("L"), dtype=np.uint8)
+        if instance_id is not None:
+            return (raw == int(instance_id)).astype(np.float32)
+        return (raw > 0).astype(np.float32)
 
     @staticmethod
     def _frame_id_from_label_path(path: Path) -> int:
@@ -255,6 +258,7 @@ class HouseCat6DCameraPose(BaseStereoViewDataset):
                             "object_index": object_index,
                             "object_name": object_name,
                             "object_id": self.object_name_to_id[object_name],
+                            "instance_id": meta.get("instance_id") if meta else None,
                             "class_id": class_id,
                             "category": category,
                             "scene_source": "housecat6d",
@@ -339,7 +343,7 @@ class HouseCat6DCameraPose(BaseStereoViewDataset):
         depthmap = self._read_depth_m(rec["depth_path"])
         intrinsic = self._read_matrix_txt(rec["intrinsics_path"], (3, 3))
         object_mask = (
-            self._read_binary_mask(rec["mask_path"])
+            self._read_binary_mask(rec["mask_path"], rec.get("instance_id"))
             if rec.get("mask_path") is not None and Path(rec["mask_path"]).is_file()
             else None
         )
