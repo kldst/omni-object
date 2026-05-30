@@ -544,6 +544,7 @@ def render_housecat6d_gif(
     use_depth_scale: bool,
     fps: float,
     max_frames: int | None,
+    save_frames: bool = False,
 ) -> Path | None:
     if model_name not in object_records:
         print(f"[skip] housecat6d/{scene_name}/{model_name}: no aligned object refs")
@@ -557,6 +558,9 @@ def render_housecat6d_gif(
 
     iter_frames = list(frame_ids[: int(max_frames)] if max_frames is not None else frame_ids)
     frames: List[np.ndarray] = []
+    frames_dir = output_path.with_name(output_path.stem + "_frames") if save_frames else None
+    if frames_dir is not None:
+        frames_dir.mkdir(parents=True, exist_ok=True)
     for frame_id in iter_frames:
         label_path = scene_dir / "labels" / f"{int(frame_id):06d}_label.pkl"
         if not label_path.is_file():
@@ -624,6 +628,10 @@ def render_housecat6d_gif(
             axis_length,
         )
         _label_frame(frame_image, f"housecat6d {scene_name} {model_name} frame {int(frame_id):06d}")
+        if frames_dir is not None:
+            frame_jpg = frames_dir / f"{int(frame_id):06d}.jpg"
+            cv2.imwrite(str(frame_jpg), cv2.cvtColor(frame_image, cv2.COLOR_RGB2BGR),
+                        [int(cv2.IMWRITE_JPEG_QUALITY), 90])
         frames.append(frame_image)
 
     if not frames:
@@ -927,6 +935,12 @@ def main():
     parser.add_argument("--align-json", type=Path, default=DEFAULT_ALIGN_JSON)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--object", type=str, default=None, help="Restrict to a single object name/id.")
+    parser.add_argument("--object-prefixes", nargs="+", default=None,
+                        help="Restrict to housecat6d objects whose model_name starts with any of these "
+                             "(e.g. 'box- tube- remote- cutlery-' to focus on hard categories).")
+    parser.add_argument("--save-frames", action="store_true",
+                        help="Also dump each rendered frame as a JPG next to the GIF "
+                             "(under <gif_stem>_frames/<frame_id:06d}.jpg).")
     parser.add_argument("--max-frames", type=int, default=None)
     parser.add_argument("--fps", type=float, default=10.0)
     parser.add_argument("--no-depth-input", action="store_true")
@@ -1005,6 +1019,9 @@ def main():
             objects = enumerate_housecat6d_objects(scene_path, frame_ids)
             if args.object:
                 objects = [item for item in objects if item[0] == args.object]
+            if args.object_prefixes:
+                prefixes = tuple(args.object_prefixes)
+                objects = [item for item in objects if str(item[0]).startswith(prefixes)]
             if not objects:
                 print(f"[skip] housecat6d/{scene_name}: no objects parsed")
                 continue
@@ -1123,6 +1140,7 @@ def main():
                 use_depth_scale=use_depth_scale,
                 fps=args.fps,
                 max_frames=args.max_frames,
+                save_frames=bool(args.save_frames),
             )
         elif dataset_key == "ycbv":
             render_ycbv_gif(

@@ -115,8 +115,8 @@ object_srt_weight_translation = 1.0
 object_srt_weight_size = 1.0
 # Mixed table uses dataset-aware keys such as "YCBVCameraPose:13", so object ids
 # from OO9D / REAL275 / YCB-V / HouseCat6D cannot collide.
-# object_srt_symmetry_info_path = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/mixed_symmetry_info.json"
-object_srt_symmetry_info_path = "/omni-object_clone_real/mixed_symmetry_info.json"
+object_srt_symmetry_info_path = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/mixed_symmetry_info.json"
+# object_srt_symmetry_info_path = "/omni-object_clone_real/mixed_symmetry_info.json"
 object_srt_symmetry_continuous_steps = 72
 
 # Dataset
@@ -129,50 +129,50 @@ fixed_object_view_ids = (1, 5, 10, 15)
 strict_fixed_object_view_ids = True
 val_max_records_per_dataset = 1000
 
-# freepose_root = "/mnt/train-data-4-hdd/yian/freepose"
-# omni_root = f"{freepose_root}/omni-object_clone"
-# align_json = f"{omni_root}/dataset_align.json"
-
-# oo9d_root = f"{freepose_root}/ov9d/ov9d"
-# oo9d_single_root = f"{oo9d_root}/oo3d9dsingle"
-# oo9d_split_root = f"{omni_root}/splits_ov9d_unseen_category_generalization"
-# oo9d_object_image_root = f"{freepose_root}/ov9d/ov9d_around_image"
-
-# real275_root = f"{freepose_root}/real275"
-# real275_split_root = f"{real275_root}/real_train"
-# real275_gt_root = f"{real275_root}/gts/real_train_umeyama"
-# real275_object_image_root = f"{real275_root}/real275_aligned_object_refs"
-
-# ycbv_root = f"{freepose_root}/datasets_real/ycbv"
-# ycbv_train_split_root = f"{ycbv_root}/train_real"
-# ycbv_val_split_root = f"{ycbv_root}/test"
-# ycbv_object_image_root = f"{ycbv_root}/ycbv_aligned_object_refs"
-
-# housecat6d_root = f"{freepose_root}/housecat6d"
-# housecat6d_object_image_root = f"{housecat6d_root}/housecat6d_aligned_object_refs"
-
-#* 緯創
-freepose_root = "/dataset"
-omni_root = f"/omni-object_clone_real"
+freepose_root = "/mnt/train-data-4-hdd/yian/freepose"
+omni_root = f"{freepose_root}/omni-object_clone"
 align_json = f"{omni_root}/dataset_align.json"
 
-oo9d_root = f"{freepose_root}/ov9d"
+oo9d_root = f"{freepose_root}/ov9d/ov9d"
 oo9d_single_root = f"{oo9d_root}/oo3d9dsingle"
 oo9d_split_root = f"{omni_root}/splits_ov9d_unseen_category_generalization"
-oo9d_object_image_root = f"{freepose_root}/ov9d_around_image"
+oo9d_object_image_root = f"{freepose_root}/ov9d/ov9d_around_image"
 
 real275_root = f"{freepose_root}/real275"
 real275_split_root = f"{real275_root}/real_train"
 real275_gt_root = f"{real275_root}/gts/real_train_umeyama"
 real275_object_image_root = f"{real275_root}/real275_aligned_object_refs"
 
-ycbv_root = f"{freepose_root}/ycbv"
+ycbv_root = f"{freepose_root}/datasets_real/ycbv"
 ycbv_train_split_root = f"{ycbv_root}/train_real"
 ycbv_val_split_root = f"{ycbv_root}/test"
 ycbv_object_image_root = f"{ycbv_root}/ycbv_aligned_object_refs"
 
 housecat6d_root = f"{freepose_root}/housecat6d"
 housecat6d_object_image_root = f"{housecat6d_root}/housecat6d_aligned_object_refs"
+
+#* 緯創
+# freepose_root = "/dataset"
+# omni_root = f"/omni-object_clone_real"
+# align_json = f"{omni_root}/dataset_align.json"
+
+# oo9d_root = f"{freepose_root}/ov9d"
+# oo9d_single_root = f"{oo9d_root}/oo3d9dsingle"
+# oo9d_split_root = f"{omni_root}/splits_ov9d_unseen_category_generalization"
+# oo9d_object_image_root = f"{freepose_root}/ov9d_around_image"
+
+# real275_root = f"{freepose_root}/real275"
+# real275_split_root = f"{real275_root}/real_train"
+# real275_gt_root = f"{real275_root}/gts/real_train_umeyama"
+# real275_object_image_root = f"{real275_root}/real275_aligned_object_refs"
+
+# ycbv_root = f"{freepose_root}/ycbv"
+# ycbv_train_split_root = f"{ycbv_root}/train_real"
+# ycbv_val_split_root = f"{ycbv_root}/test"
+# ycbv_object_image_root = f"{ycbv_root}/ycbv_aligned_object_refs"
+
+# housecat6d_root = f"{freepose_root}/housecat6d"
+# housecat6d_object_image_root = f"{housecat6d_root}/housecat6d_aligned_object_refs"
 
 train_dataset = (
     "torch.utils.data.ConcatDataset(("

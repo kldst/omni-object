@@ -56,6 +56,7 @@ class HouseCat6DCameraPose(BaseStereoViewDataset):
         object_presence_prob: float = 1.0,
         normalize_object_translation_by_depth_mean: bool = True,
         depth_mean_eps: float = 1e-6,
+        scene_glob: str = "scene*",
         *args,
         **kwargs,
     ):
@@ -73,6 +74,7 @@ class HouseCat6DCameraPose(BaseStereoViewDataset):
         self.only_object_name = str(only_object_name).strip()
         self.only_category = str(only_category).strip()
         self.expand_records_by_object = bool(expand_records_by_object)
+        self.scene_glob = str(scene_glob)
         self.object_presence_prob = float(object_presence_prob)
         if not 0.0 <= self.object_presence_prob <= 1.0:
             raise ValueError(f"object_presence_prob must be in [0, 1], got {self.object_presence_prob}")
@@ -203,7 +205,7 @@ class HouseCat6DCameraPose(BaseStereoViewDataset):
         skipped_no_ref = 0
         skipped_missing_file = 0
 
-        for scene_dir in sorted(self.dataset_location.glob("scene*")):
+        for scene_dir in sorted(self.dataset_location.glob(self.scene_glob)):
             if not scene_dir.is_dir() or not (scene_dir / "meta.txt").is_file():
                 continue
             scene_name = scene_dir.name
