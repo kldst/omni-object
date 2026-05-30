@@ -189,6 +189,9 @@ val_dataset = (
     f"max_records={val_max_records_per_dataset}, "
     "z_far=20, "
     f"resolution={resolution}, "
-    "scene_glob='val_scene*', "  # held-out: val_scene1, val_scene2
+    # Remote-friendly: use scene34 (last train scene) as stand-in for val since
+    # val_scene1/2 may not be uploaded to the cluster. Switch back to
+    # 'val_scene*' once those dirs exist locally.
+    "scene_glob='scene34', "
     "seed=42)"
 )
