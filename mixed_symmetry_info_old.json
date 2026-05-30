@@ -15,22 +15,7 @@
       }
     ]
   },
-  "HouseCat6DCameraPose:2": {
-    "symmetries_continuous": [
-      {
-        "axis": [
-          0,
-          1,
-          0
-        ],
-        "offset": [
-          0,
-          0,
-          0
-        ]
-      }
-    ]
-  },
+  "HouseCat6DCameraPose:2": {},
   "HouseCat6DCameraPose:3": {
     "symmetries_continuous": [
       {
@@ -64,19 +49,33 @@
     ]
   },
   "HouseCat6DCameraPose:5": {
-    "symmetries_continuous": [
-      {
-        "axis": [
+    "symmetries_discrete": [
+      [
+        [
+          -1.0,
           0,
-          1,
+          0.0,
           0
         ],
-        "offset": [
+        [
           0,
+          1,
           0,
           0
+        ],
+        [
+          -0.0,
+          0,
+          -1.0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
         ]
-      }
+      ]
     ]
   },
   "HouseCat6DCameraPose:6": {
@@ -96,51 +95,93 @@
     ]
   },
   "HouseCat6DCameraPose:7": {
-    "symmetries_continuous": [
-      {
-        "axis": [
+    "symmetries_discrete": [
+      [
+        [
+          -1.0,
           0,
-          1,
+          0.0,
           0
         ],
-        "offset": [
+        [
           0,
+          1,
           0,
           0
+        ],
+        [
+          -0.0,
+          0,
+          -1.0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
         ]
-      }
+      ]
     ]
   },
   "HouseCat6DCameraPose:8": {
-    "symmetries_continuous": [
-      {
-        "axis": [
+    "symmetries_discrete": [
+      [
+        [
+          -1.0,
           0,
-          1,
+          0.0,
           0
         ],
-        "offset": [
+        [
           0,
+          1,
           0,
           0
+        ],
+        [
+          -0.0,
+          0,
+          -1.0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
         ]
-      }
+      ]
     ]
   },
   "HouseCat6DCameraPose:17": {
-    "symmetries_continuous": [
-      {
-        "axis": [
+    "symmetries_discrete": [
+      [
+        [
+          -1.0,
           0,
-          1,
+          0.0,
           0
         ],
-        "offset": [
+        [
           0,
+          1,
           0,
           0
+        ],
+        [
+          -0.0,
+          0,
+          -1.0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
         ]
-      }
+      ]
     ]
   },
   "HouseCat6DCameraPose:18": {
@@ -176,19 +217,33 @@
     ]
   },
   "HouseCat6DCameraPose:20": {
-    "symmetries_continuous": [
-      {
-        "axis": [
+    "symmetries_discrete": [
+      [
+        [
+          -1.0,
           0,
-          1,
+          0.0,
           0
         ],
-        "offset": [
+        [
           0,
+          1,
           0,
           0
+        ],
+        [
+          -0.0,
+          0,
+          -1.0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
         ]
-      }
+      ]
     ]
   },
   "HouseCat6DCameraPose:21": {
@@ -207,10 +262,438 @@
       }
     ]
   },
-  "HouseCat6DCameraPose:22": {},
-  "HouseCat6DCameraPose:23": {},
-  "HouseCat6DCameraPose:37": {},
-  "HouseCat6DCameraPose:38": {},
+  "HouseCat6DCameraPose:22": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          -1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          -1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:23": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          -1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          -1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:37": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          -1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          -1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:38": {
+    "symmetries_discrete": [
+      [
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          -1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          -1,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          -1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          -1,
+          0,
+          0
+        ],
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
   "HouseCat6DCameraPose:45": {
     "symmetries_continuous": [
       {
@@ -851,24 +1334,546 @@
       }
     ]
   },
-  "HouseCat6DCameraPose:177": {},
-  "HouseCat6DCameraPose:178": {},
-  "HouseCat6DCameraPose:179": {},
-  "HouseCat6DCameraPose:180": {},
-  "HouseCat6DCameraPose:181": {},
-  "HouseCat6DCameraPose:182": {},
-  "HouseCat6DCameraPose:183": {},
-  "HouseCat6DCameraPose:184": {},
-  "HouseCat6DCameraPose:185": {},
-  "HouseCat6DCameraPose:186": {},
-  "HouseCat6DCameraPose:187": {},
-  "HouseCat6DCameraPose:188": {},
-  "HouseCat6DCameraPose:189": {},
-  "HouseCat6DCameraPose:190": {},
-  "HouseCat6DCameraPose:191": {},
-  "HouseCat6DCameraPose:192": {},
-  "HouseCat6DCameraPose:193": {},
-  "HouseCat6DCameraPose:194": {},
+  "HouseCat6DCameraPose:177": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:178": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:179": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:180": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:181": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:182": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:183": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:184": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:185": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:186": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:187": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:188": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:189": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:190": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:191": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:192": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:193": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  "HouseCat6DCameraPose:194": {
+    "symmetries_discrete": [
+      [
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
   "OO9DSingleCameraPose:39": {
     "symmetries_continuous": [
       {
@@ -72702,244 +73707,5 @@
         1.0
       ]
     ]
-  },
-  "HouseCat6DCameraPose:9": {
-    "symmetries_continuous": [
-      {
-        "axis": [
-          0,
-          1,
-          0
-        ],
-        "offset": [
-          0,
-          0,
-          0
-        ]
-      }
-    ]
-  },
-  "HouseCat6DCameraPose:10": {
-    "symmetries_continuous": [
-      {
-        "axis": [
-          0,
-          1,
-          0
-        ],
-        "offset": [
-          0,
-          0,
-          0
-        ]
-      }
-    ]
-  },
-  "HouseCat6DCameraPose:11": {
-    "symmetries_continuous": [
-      {
-        "axis": [
-          0,
-          1,
-          0
-        ],
-        "offset": [
-          0,
-          0,
-          0
-        ]
-      }
-    ]
-  },
-  "HouseCat6DCameraPose:12": {
-    "symmetries_continuous": [
-      {
-        "axis": [
-          0,
-          1,
-          0
-        ],
-        "offset": [
-          0,
-          0,
-          0
-        ]
-      }
-    ]
-  },
-  "HouseCat6DCameraPose:13": {
-    "symmetries_continuous": [
-      {
-        "axis": [
-          0,
-          1,
-          0
-        ],
-        "offset": [
-          0,
-          0,
-          0
-        ]
-      }
-    ]
-  },
-  "HouseCat6DCameraPose:14": {
-    "symmetries_continuous": [
-      {
-        "axis": [
-          0,
-          1,
-          0
-        ],
-        "offset": [
-          0,
-          0,
-          0
-        ]
-      }
-    ]
-  },
-  "HouseCat6DCameraPose:15": {
-    "symmetries_continuous": [
-      {
-        "axis": [
-          0,
-          1,
-          0
-        ],
-        "offset": [
-          0,
-          0,
-          0
-        ]
-      }
-    ]
-  },
-  "HouseCat6DCameraPose:16": {
-    "symmetries_continuous": [
-      {
-        "axis": [
-          0,
-          1,
-          0
-        ],
-        "offset": [
-          0,
-          0,
-          0
-        ]
-      }
-    ]
-  },
-  "HouseCat6DCameraPose:24": {},
-  "HouseCat6DCameraPose:25": {},
-  "HouseCat6DCameraPose:26": {},
-  "HouseCat6DCameraPose:27": {},
-  "HouseCat6DCameraPose:28": {},
-  "HouseCat6DCameraPose:29": {},
-  "HouseCat6DCameraPose:30": {},
-  "HouseCat6DCameraPose:31": {},
-  "HouseCat6DCameraPose:32": {},
-  "HouseCat6DCameraPose:33": {},
-  "HouseCat6DCameraPose:34": {},
-  "HouseCat6DCameraPose:35": {},
-  "HouseCat6DCameraPose:36": {},
-  "HouseCat6DCameraPose:39": {},
-  "HouseCat6DCameraPose:40": {},
-  "HouseCat6DCameraPose:41": {},
-  "HouseCat6DCameraPose:42": {},
-  "HouseCat6DCameraPose:43": {},
-  "HouseCat6DCameraPose:44": {},
-  "HouseCat6DCameraPose:68": {},
-  "HouseCat6DCameraPose:69": {},
-  "HouseCat6DCameraPose:70": {},
-  "HouseCat6DCameraPose:71": {},
-  "HouseCat6DCameraPose:72": {},
-  "HouseCat6DCameraPose:73": {},
-  "HouseCat6DCameraPose:74": {},
-  "HouseCat6DCameraPose:75": {},
-  "HouseCat6DCameraPose:76": {},
-  "HouseCat6DCameraPose:77": {},
-  "HouseCat6DCameraPose:78": {},
-  "HouseCat6DCameraPose:79": {},
-  "HouseCat6DCameraPose:80": {},
-  "HouseCat6DCameraPose:81": {},
-  "HouseCat6DCameraPose:82": {},
-  "HouseCat6DCameraPose:83": {},
-  "HouseCat6DCameraPose:84": {},
-  "HouseCat6DCameraPose:85": {},
-  "HouseCat6DCameraPose:86": {},
-  "HouseCat6DCameraPose:87": {},
-  "HouseCat6DCameraPose:88": {},
-  "HouseCat6DCameraPose:89": {},
-  "HouseCat6DCameraPose:90": {},
-  "HouseCat6DCameraPose:91": {},
-  "HouseCat6DCameraPose:92": {},
-  "HouseCat6DCameraPose:93": {},
-  "HouseCat6DCameraPose:94": {},
-  "HouseCat6DCameraPose:95": {},
-  "HouseCat6DCameraPose:96": {},
-  "HouseCat6DCameraPose:97": {},
-  "HouseCat6DCameraPose:98": {},
-  "HouseCat6DCameraPose:99": {},
-  "HouseCat6DCameraPose:100": {},
-  "HouseCat6DCameraPose:118": {},
-  "HouseCat6DCameraPose:119": {},
-  "HouseCat6DCameraPose:120": {},
-  "HouseCat6DCameraPose:121": {},
-  "HouseCat6DCameraPose:122": {},
-  "HouseCat6DCameraPose:123": {},
-  "HouseCat6DCameraPose:124": {},
-  "HouseCat6DCameraPose:125": {},
-  "HouseCat6DCameraPose:126": {},
-  "HouseCat6DCameraPose:127": {},
-  "HouseCat6DCameraPose:128": {},
-  "HouseCat6DCameraPose:129": {},
-  "HouseCat6DCameraPose:130": {},
-  "HouseCat6DCameraPose:131": {},
-  "HouseCat6DCameraPose:132": {},
-  "HouseCat6DCameraPose:133": {},
-  "HouseCat6DCameraPose:134": {},
-  "HouseCat6DCameraPose:135": {},
-  "HouseCat6DCameraPose:136": {},
-  "HouseCat6DCameraPose:137": {},
-  "HouseCat6DCameraPose:138": {},
-  "HouseCat6DCameraPose:139": {},
-  "HouseCat6DCameraPose:140": {},
-  "HouseCat6DCameraPose:141": {},
-  "HouseCat6DCameraPose:142": {},
-  "HouseCat6DCameraPose:143": {},
-  "HouseCat6DCameraPose:144": {},
-  "HouseCat6DCameraPose:145": {},
-  "HouseCat6DCameraPose:146": {},
-  "HouseCat6DCameraPose:147": {},
-  "HouseCat6DCameraPose:148": {},
-  "HouseCat6DCameraPose:149": {},
-  "HouseCat6DCameraPose:150": {},
-  "HouseCat6DCameraPose:151": {},
-  "HouseCat6DCameraPose:152": {},
-  "HouseCat6DCameraPose:153": {},
-  "HouseCat6DCameraPose:154": {},
-  "HouseCat6DCameraPose:155": {},
-  "HouseCat6DCameraPose:156": {},
-  "HouseCat6DCameraPose:157": {},
-  "HouseCat6DCameraPose:158": {},
-  "HouseCat6DCameraPose:159": {},
-  "HouseCat6DCameraPose:160": {},
-  "HouseCat6DCameraPose:161": {},
-  "HouseCat6DCameraPose:162": {},
-  "HouseCat6DCameraPose:163": {},
-  "HouseCat6DCameraPose:164": {},
-  "HouseCat6DCameraPose:165": {},
-  "HouseCat6DCameraPose:166": {},
-  "HouseCat6DCameraPose:167": {},
-  "HouseCat6DCameraPose:168": {},
-  "HouseCat6DCameraPose:169": {},
-  "HouseCat6DCameraPose:170": {},
-  "HouseCat6DCameraPose:171": {},
-  "HouseCat6DCameraPose:172": {},
-  "HouseCat6DCameraPose:173": {},
-  "HouseCat6DCameraPose:174": {},
-  "HouseCat6DCameraPose:175": {},
-  "HouseCat6DCameraPose:176": {}
+  }
 }
