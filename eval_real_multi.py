@@ -617,9 +617,10 @@ class Real275RealTestCameraPose(BaseStereoViewDataset):
 # Dataset constructors keyed by split name.
 # ============================================================================
 def build_dataset(split: str, args) -> Dataset:
+    view_ids = tuple(int(v) for v in (getattr(args, "view_ids", None) or DEFAULT_OBJECT_VIEWS))
     common = dict(
-        num_object_views=4,
-        fixed_object_view_ids=DEFAULT_OBJECT_VIEWS,
+        num_object_views=len(view_ids),
+        fixed_object_view_ids=view_ids,
         strict_fixed_object_view_ids=True,
         normalize_object_translation_by_depth_mean=True,
         verify_files=True,
@@ -630,11 +631,15 @@ def build_dataset(split: str, args) -> Dataset:
         seed=42,
     )
     if split == "ycbv_test":
+        ycbv_obj_root = (
+            Path(args.ycbv_object_image_root) if getattr(args, "ycbv_object_image_root", None)
+            else args.ycbv_root / "ycbv_aligned_object_refs"
+        )
         return YCBVCameraPose(
             dataset_location=str(args.ycbv_root),
             dset="test",
             split_root=str(args.ycbv_root / "test"),
-            object_image_root=str(args.ycbv_root / "ycbv_aligned_object_refs"),
+            object_image_root=str(ycbv_obj_root),
             align_json=str(args.align_json),
             expand_records_by_object=True,
             **common,
@@ -1250,6 +1255,12 @@ def parse_args(argv=None) -> argparse.Namespace:
                         help="Sampling step for continuous rotation symmetries (larger = finer).")
     parser.add_argument("--align-json", type=Path, default=DEFAULT_ALIGN_JSON)
     parser.add_argument("--ycbv-root", type=Path, default=DEFAULT_YCBV_ROOT)
+    parser.add_argument("--ycbv-object-image-root", type=Path, default=None,
+                        help="Override YCBV reference-view root (e.g. .../ycbv_aligned_object_refs_diverse24)")
+    parser.add_argument("--view-ids", nargs="+", type=int, default=None,
+                        help="Override fixed_object_view_ids (e.g. 0 5 8 19 for diverse24)")
+    parser.add_argument("--frame-stride", type=int, default=1,
+                        help="Subsample frames: keep only frames where image_id %% stride == 0.")
     parser.add_argument("--housecat-root", type=Path, default=DEFAULT_HOUSECAT_ROOT)
     parser.add_argument("--real275-root", type=Path, default=DEFAULT_REAL275_ROOT)
     parser.add_argument("--real275-instance-refs", type=Path,
@@ -1315,6 +1326,14 @@ def run_worker(args: argparse.Namespace, gpu_id: Optional[str], shard_index: int
         except Exception as exc:  # noqa: BLE001 - we want to log and skip
             print(f"[worker] split={split} dataset build failed: {exc!r}")
             continue
+        frame_stride = int(getattr(args, "frame_stride", 1) or 1)
+        if frame_stride > 1 and hasattr(dataset, "records"):
+            before = len(dataset.records)
+            dataset.records = [r for r in dataset.records
+                               if int(r.get("image_id", 0)) % frame_stride == 0]
+            if hasattr(dataset, "scenes"):
+                dataset.scenes = dataset.records
+            print(f"[worker] split={split} frame-stride={frame_stride} records {before} -> {len(dataset.records)}")
         samples = evaluate_split(
             split=split,
             dataset=dataset,
@@ -1360,6 +1379,12 @@ def orchestrate(args: argparse.Namespace, gpu_ids: List[str]) -> None:
     ]
     if args.no_amp:
         base_cmd.append("--no-amp")
+    if args.ycbv_object_image_root is not None:
+        base_cmd.extend(["--ycbv-object-image-root", str(args.ycbv_object_image_root)])
+    if args.view_ids is not None:
+        base_cmd.extend(["--view-ids", *(str(v) for v in args.view_ids)])
+    if getattr(args, "frame_stride", 1) and int(args.frame_stride) > 1:
+        base_cmd.extend(["--frame-stride", str(int(args.frame_stride))])
     if args.limit is not None:
         base_cmd.extend(["--limit", str(args.limit)])
     base_cmd.extend(["--splits", *args.splits])

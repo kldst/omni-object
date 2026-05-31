@@ -79,7 +79,7 @@ def build_dataset(scene: str, args) -> HouseCat6DTestSceneCameraPose:
         else args.housecat_root / "housecat6d_aligned_object_refs"
     )
     view_ids = tuple(int(v) for v in getattr(args, "view_ids", None) or DEFAULT_OBJECT_VIEWS)
-    return HouseCat6DTestSceneCameraPose(
+    ds = HouseCat6DTestSceneCameraPose(
         dataset_location=str(args.housecat_root),
         dset="test",
         object_image_root=str(object_image_root),
@@ -97,6 +97,13 @@ def build_dataset(scene: str, args) -> HouseCat6DTestSceneCameraPose:
         transform=ImgNorm,
         seed=42,
     )
+    frame_stride = int(getattr(args, "frame_stride", 1) or 1)
+    if frame_stride > 1 and hasattr(ds, "records"):
+        before = len(ds.records)
+        ds.records = [r for r in ds.records if int(r.get("image_id", 0)) % frame_stride == 0]
+        ds.scenes = ds.records
+        print(f"[frame-stride={frame_stride}] {scene}: {before} -> {len(ds.records)} records")
+    return ds
 
 
 def _to_device(batch: Dict, device: torch.device) -> Dict:
@@ -326,6 +333,8 @@ def parse_args(argv=None) -> argparse.Namespace:
                    help="Override reference-view root (e.g. .../housecat6d_aligned_object_refs_diverse24)")
     p.add_argument("--view-ids", nargs="+", type=int, default=None,
                    help="Override fixed_object_view_ids (e.g. 0 5 8 19 for diverse24)")
+    p.add_argument("--frame-stride", type=int, default=1,
+                   help="Subsample test frames: keep only frames where image_id %% stride == 0.")
     p.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     p.add_argument("--scenes", nargs="+", default=list(TEST_SCENES))
     p.add_argument("--batch-size", type=int, default=8)
@@ -373,6 +382,8 @@ def orchestrate(args: argparse.Namespace, gpu_ids: List[str]) -> None:
             cmd.extend(["--object-image-root", str(args.object_image_root)])
         if args.view_ids is not None:
             cmd.extend(["--view-ids", *(str(v) for v in args.view_ids)])
+        if getattr(args, "frame_stride", 1) and int(args.frame_stride) > 1:
+            cmd.extend(["--frame-stride", str(int(args.frame_stride))])
         log_path = args.output_dir / f"shard_{j:02d}.log"
         log_paths.append(log_path)
         log_fh = open(log_path, "w", encoding="utf-8")
