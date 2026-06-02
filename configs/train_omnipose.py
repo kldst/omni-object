@@ -127,7 +127,7 @@ object_srt_weight_size = 1.0
 # their rotation equivalence set so the pose loss isn't penalized for equivalent rotations.
 # Remote: change this path to wherever omni6dpose_symmetry_info.json lives.
 # object_srt_symmetry_info_path = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/omni6dpose_symmetry_info.json"
-object_srt_symmetry_info_path = "/omni-object_omni6dpose/omni6dpose_symmetry_info.json"
+object_srt_symmetry_info_path = "/omni-object_clone_real/omni6dpose_symmetry_info.json"
 object_srt_symmetry_continuous_steps = 72
 
 # Dataset
@@ -151,7 +151,7 @@ val_max_records_per_dataset = 1000
 # object_image_root = f"{omni6dpose_root}/omni6dpose_ref/diverse24"
 
 #* ---- Omni6DPose SOPE paths (remote) ----
-omni_root = "/omni-object_omni6dpose"        # omni-object_clone 在遠端的位置
+omni_root = "/omni-object_clone_real"        # omni-object_clone 在遠端的位置
 omni6dpose_root = "/dataset/omni6dpose"      # 兩個 tar 解壓到這裡
 sope_root = omni6dpose_root
 object_image_root = f"{omni6dpose_root}/diverse24"
