@@ -40,6 +40,9 @@ YCBVCameraPose = import_module(
 Real275CameraPose = import_module(
     "omnivggt.datasets.real275.real275_camera_pose"
 ).Real275CameraPose
+Omni6DPoseCameraPose = import_module(
+    "omnivggt.datasets.omni6dpose.omni6dpose_camera_pose"
+).Omni6DPoseCameraPose
 
 from omnivggt.datasets.utils.transforms import ImgNorm, ColorJitter
 

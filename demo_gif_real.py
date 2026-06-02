@@ -938,6 +938,9 @@ def main():
     parser.add_argument("--object-prefixes", nargs="+", default=None,
                         help="Restrict to housecat6d objects whose model_name starts with any of these "
                              "(e.g. 'box- tube- remote- cutlery-' to focus on hard categories).")
+    parser.add_argument("--view-ids", nargs="+", type=int, default=None,
+                        help="Override fixed_object_view_ids (e.g. 0 5 8 9). If not set, "
+                             "uses the config's fixed_object_view_ids.")
     parser.add_argument("--save-frames", action="store_true",
                         help="Also dump each rendered frame as a JPG next to the GIF "
                              "(under <gif_stem>_frames/<frame_id:06d}.jpg).")
@@ -961,7 +964,11 @@ def main():
     cfg = load_config(Path(args.config))
     runtime = resolve_runtime_settings(cfg)
     resolution = tuple(int(v) for v in runtime["resolution"])
-    object_views = tuple(int(v) for v in runtime["object_input_views"])
+    if getattr(args, "view_ids", None):
+        object_views = tuple(int(v) for v in args.view_ids)
+        print(f"[demo_gif] view-ids override from CLI: {object_views}")
+    else:
+        object_views = tuple(int(v) for v in runtime["object_input_views"])
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     checkpoint_path = Path(args.checkpoint).expanduser()
