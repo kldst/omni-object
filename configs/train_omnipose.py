@@ -15,7 +15,7 @@
 #      (normalize_object_translation_by_depth_mean=True): t_pred ~= t_metric / depth.mean().
 
 output_dir = "outputs"
-exp_name = "omni6dpose_sope_diverse24_0602"
+exp_name = "omni6dpose_sope_diverse24_0602_ft"
 logging_dir = "logs"
 
 wandb = True
@@ -27,7 +27,7 @@ checkpointing_steps = 1000  # smaller dataset -> save more often
 
 # Model (local warm-start from the 0531_REFER checkpoint; set to None to train from scratch)
 # model_url = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/outputs/0531_REFER/lr_1e5_1000/model.safetensors"
-model_url = "/all_data/model.safetensors"
+model_url = "/omni-object_clone_real/outputs/omni6dpose_sope_diverse24_0602/checkpoint-2-7000/model.safetensors"  # remote
 model_load_strict = False
 model_requires_grad = False
 patch_embed_freeze = True
@@ -127,7 +127,7 @@ object_srt_weight_size = 1.0
 # their rotation equivalence set so the pose loss isn't penalized for equivalent rotations.
 # Remote: change this path to wherever omni6dpose_symmetry_info.json lives.
 # object_srt_symmetry_info_path = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/omni6dpose_symmetry_info.json"
-object_srt_symmetry_info_path = "/omni-object_clone_real/omni6dpose_symmetry_info.json"
+object_srt_symmetry_info_path = "/omni-object_clone_real/omni6dpose_symmetry_info.json"  # remote
 object_srt_symmetry_continuous_steps = 72
 
 # Dataset
@@ -143,11 +143,12 @@ fixed_object_view_ids = (0, 5, 8, 19)
 strict_fixed_object_view_ids = True
 val_max_records_per_dataset = 1000
 
-#* ---- Omni6DPose SOPE paths (local) ----
+#* ---- Omni6DPose SOPE/ROPE paths (local) ----
 # omni_root = f"{freepose_root}/omni-object_clone"
 # omni6dpose_root = f"{freepose_root}/Omni6dpose/Omni6DPoseAPI/data/Omni6DPose"
 # sope_root = f"{omni6dpose_root}/SOPE"
-# # diverse24 PAM-mesh object references (top/front/back/bottom), views 0/5/8/19
+# rope_root = f"{omni6dpose_root}/ROPE"
+# diverse24 PAM-mesh object references (top/front/back/bottom), views 0/5/8/19
 # object_image_root = f"{omni6dpose_root}/omni6dpose_ref/diverse24"
 
 #* ---- Omni6DPose SOPE paths (remote) ----
