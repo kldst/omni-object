@@ -39,7 +39,7 @@ from omnivggt.utils.image import ImgNorm
 
 # --------------------------------------------------------------------------- paths
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "train_omnipose.py"
-DEFAULT_CHECKPOINT = PROJECT_ROOT / "outputs" / "0603_omni6dpose" / "6000" / "model.safetensors"
+DEFAULT_CHECKPOINT = PROJECT_ROOT / "outputs" / "0531_REFER" / "lr_1e5_1000" / "model.safetensors"
 
 DEFAULT_OMNI6DPOSE_ROOT = Path(
     "/mnt/train-data-4-hdd/yian/freepose/Omni6dpose/Omni6DPoseAPI/data/Omni6DPose"
@@ -842,17 +842,32 @@ class DemoApp:
             name: idx + 1 for idx, name in enumerate(sorted(self.object_records_by_name.keys()))
         }
 
-        # ROPE objects have no PAM mesh / direct ref on disk, so they fall back to a
-        # category-level approximation: a `real-<cat>_<id>` object reuses the nearest
-        # same-category `real-<cat>_*` reference that DOES exist (only `camera` and
-        # `laptop` currently). Build category -> sorted real-* ref names.
-        self.real_refs_by_category: Dict[str, List[str]] = {}
+        # ROPE objects have no PAM mesh / rendered reference of their own, so they
+        # borrow a *synthetic* diverse24 reference of the same class:
+        #   1. exact instance — `rope_oid_to_pam.json` maps a few ROPE oids to the
+        #      matching synthetic render (e.g. real-chess_001 -> omniobject3d-chess_001);
+        #   2. same-class approx — otherwise reuse the nearest-instance diverse24 ref
+        #      whose semantic class matches (most ROPE objects land here).
+        # Build class_name -> sorted ref names over ALL diverse24 records.
+        self.refs_by_category: Dict[str, List[str]] = {}
         for name in self.object_records_by_name:
-            if name.startswith("real-"):
-                category = name[len("real-"):].rsplit("_", 1)[0]
-                self.real_refs_by_category.setdefault(category, []).append(name)
-        for category in self.real_refs_by_category:
-            self.real_refs_by_category[category].sort()
+            self.refs_by_category.setdefault(self._oid_class_name(name), []).append(name)
+        for category in self.refs_by_category:
+            self.refs_by_category[category].sort()
+        # Kept for reporting: which classes have a real-* (real-world scanned) ref.
+        self.real_refs_by_category: Dict[str, List[str]] = {
+            cat: refs
+            for cat, names in self.refs_by_category.items()
+            if (refs := [n for n in names if n.startswith("real-")])
+        }
+
+        # Precomputed exact ROPE-oid -> synthetic-ref map (same instance), if present.
+        self.rope_oid_to_pam: Dict[str, str] = {}
+        if self.rope_oid_to_pam_path.is_file():
+            try:
+                self.rope_oid_to_pam = dict(read_json(self.rope_oid_to_pam_path).get("oid_to_pam", {}))
+            except Exception:
+                self.rope_oid_to_pam = {}
 
         # SOPE train categories at two granularities, used to flag SOPE/test objects
         # whose category never appears in train:
@@ -872,8 +887,8 @@ class DemoApp:
                 "root": self.rope_root,
                 "layout": "flat",
                 "split": None,
-                "oid_to_pam": {},
-                "match": "category",  # real-<cat>_<id> -> nearest same-category real-* ref
+                "oid_to_pam": self.rope_oid_to_pam,
+                "match": "category",  # synthetic ref: exact (oid_to_pam) else nearest same-class
             }
         if self.sope_root.is_dir():
             self.sources[SOURCE_SOPE_TRAIN] = {
@@ -1013,12 +1028,17 @@ class DemoApp:
     def _resolve_pam_name(self, source_key: str, oid: str) -> str:
         source = self.sources[source_key]
         if source.get("match") == "category":
-            # ROPE: reuse the nearest-instance same-category real-* reference.
-            refs = self.real_refs_by_category.get(self._oid_category(oid))
+            # ROPE: substitute a synthetic diverse24 ref of the same class.
+            # 1. exact instance, if a render exists (rope_oid_to_pam).
+            mapped = source.get("oid_to_pam", {}).get(oid)
+            if mapped and mapped in self.object_records_by_name:
+                return str(mapped)
+            # 2. nearest-instance diverse24 ref of the same class (approx).
+            refs = self.refs_by_category.get(self._oid_class_name(oid))
             if refs:
                 qid = self._oid_instance_id(oid)
                 return min(refs, key=lambda n: (abs(self._oid_instance_id(n) - qid), self._oid_instance_id(n)))
-            return str(oid)  # no same-category real ref -> not referenceable
+            return str(oid)  # no same-class ref -> not referenceable
         return str(source["oid_to_pam"].get(oid, oid))
 
     def _is_category_approx(self, source_key: str, oid: str) -> bool:
@@ -1026,6 +1046,17 @@ class DemoApp:
             self.sources[source_key].get("match") == "category"
             and self._resolve_pam_name(source_key, oid) != str(oid)
         )
+
+    def _ref_note(self, source_key: str, oid: str) -> str:
+        """Concise label describing how a ROPE object's reference was substituted."""
+        if not self._is_category_approx(source_key, oid):
+            return ""
+        resolved = self._resolve_pam_name(source_key, oid)
+        if self.sources[source_key].get("oid_to_pam", {}).get(oid) == resolved:
+            return " · synthetic ref (same instance)"
+        if resolved.startswith("real-"):
+            return " · category-approx (same-class real ref)"
+        return " · synthetic category-approx (same class)"
 
     def get_scene_choices(self, source_key: str) -> List[str]:
         if source_key not in self.sources:
@@ -1147,7 +1178,7 @@ class DemoApp:
             category = str(om.get("class_name", ""))
             pam_name = self._resolve_pam_name(source_key, oid)
             if pam_name in self.object_records_by_name:
-                approx = " · category-approx" if self._is_category_approx(source_key, oid) else ""
+                approx = self._ref_note(source_key, oid)
                 with_ref.append((f"[{category}] {oid} → ref {pam_name}{approx}", str(obj_key)))
             else:
                 without_ref.append((f"[{category}] {oid} (no ref · GT only)", str(obj_key)))
@@ -1424,7 +1455,7 @@ class DemoApp:
             f"- predicted pose with GT bbox size: `{pred_pose_gt_bbox}`",
             f"- object: `{obj_key}` · oid `{oid}` · `{category}` (mask id {mask_id})",
             f"- reference render: `{pam_name}` (object id `{object_id}`)"
-            + (" · **category-approx** (different instance, same class → pose is approximate)"
+            + (f" · **{self._ref_note(source_key, oid).lstrip(' ·')}** → pose is approximate"
                if self._is_category_approx(source_key, oid) else ""),
             f"- predicted presence probability: `{presence_prob:.6f}` (logit `{presence_logit:.6f}`)",
             f"- predicted present @0.5: `{bool(pred_present)}`",
@@ -1505,7 +1536,8 @@ def build_demo(app: DemoApp):
             f"- ROPE root: `{app.rope_root}`",
             f"- SOPE root: `{app.sope_root}`",
             f"- diverse24 object refs: `{app.object_image_root}`",
-            f"- ROPE real-* ref categories (category-approx): `{ {c: len(v) for c, v in app.real_refs_by_category.items()} }`",
+            f"- ROPE real-* ref categories: `{ {c: len(v) for c, v in app.real_refs_by_category.items()} }`",
+            f"- ROPE exact synthetic-ref entries (oid_to_pam): `{len(app.rope_oid_to_pam)}`",
             f"- symmetry info: `{app.symmetry_info_path}`",
             f"- loaded checkpoint: `{app.checkpoint_path}`",
             f"- object views: `{app.object_views}`",
@@ -1518,8 +1550,10 @@ def build_demo(app: DemoApp):
             "**SOPE/test (novel source-class)**：source-class（來源+類別）在 train 沒出現過的 test 物件/場景 ",
             "（含同類別但新 mesh 來源，如 phocal-laundry_detergent；共 15 類 / 577 場景）。",
             "**SOPE/test (novel class)**：純語意 class 名稱在 train 完全沒出現過的（目前僅 guitar / 36 場景）。",
-            "**ROPE 物件無自己的 PAM mesh/ref**，故採同類別近似：`real-<cat>_<id>` 借用最接近的同類別 ",
-            "`real-<cat>_*` reference（目前僅 camera / laptop 有），標示為 `category-approx`，pose 為近似值。",
+            "**ROPE 物件無自己的 PAM mesh/ref**，故借用同類別的「合成」diverse24 reference：",
+            "(1) 少數有 `rope_oid_to_pam.json` 對到同一 instance 的合成 render（如 real-chess_001 → ",
+            "omniobject3d-chess_001）；(2) 其餘取語意類別相同、instance id 最接近的合成 ref（多數屬此），",
+            "標示為 `synthetic category-approx`，pose 為近似值。僅 camera / laptop 另有 real-* reference。",
         ]
     )
 

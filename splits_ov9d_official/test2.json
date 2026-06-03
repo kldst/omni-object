@@ -1,0 +1,1400 @@
+{
+  "split": "test2",
+  "single_dir": "/mnt/train-data-4-hdd/yian/freepose/ov9d/ov9d/oo3d9dsingle",
+  "unseen_categories": [
+    "bowl",
+    "bumbag",
+    "dumpling",
+    "facial_cream",
+    "handbag",
+    "litchi",
+    "mouse",
+    "pineapple",
+    "teddy_bear",
+    "toy_truck"
+  ],
+  "test1_ratio": 0.2,
+  "count": 230,
+  "scenes": [
+    {
+      "scene_name": "bowl_001_8r1hcg3lygdev2a11dixk64tum676k97",
+      "category": "bowl",
+      "object_instance": "bowl_001",
+      "relative_path": "oo3d9dsingle/bowl_001_8r1hcg3lygdev2a11dixk64tum676k97"
+    },
+    {
+      "scene_name": "bowl_002_r0h0lu8uw56yu6odumovcnyoj4qpwbun",
+      "category": "bowl",
+      "object_instance": "bowl_002",
+      "relative_path": "oo3d9dsingle/bowl_002_r0h0lu8uw56yu6odumovcnyoj4qpwbun"
+    },
+    {
+      "scene_name": "bowl_003_dddix5clnjnt1xr8z98cx7gd0i2y73z7",
+      "category": "bowl",
+      "object_instance": "bowl_003",
+      "relative_path": "oo3d9dsingle/bowl_003_dddix5clnjnt1xr8z98cx7gd0i2y73z7"
+    },
+    {
+      "scene_name": "bowl_007_6h3edv06xg8uq3wu6gm4fdu8bbar22r0",
+      "category": "bowl",
+      "object_instance": "bowl_007",
+      "relative_path": "oo3d9dsingle/bowl_007_6h3edv06xg8uq3wu6gm4fdu8bbar22r0"
+    },
+    {
+      "scene_name": "bowl_008_53ej0rzvgquwoqlur0vskebwh4mjsc3z",
+      "category": "bowl",
+      "object_instance": "bowl_008",
+      "relative_path": "oo3d9dsingle/bowl_008_53ej0rzvgquwoqlur0vskebwh4mjsc3z"
+    },
+    {
+      "scene_name": "bowl_009_bzjd4iqeis01suwwhsk0anphfsyioivk",
+      "category": "bowl",
+      "object_instance": "bowl_009",
+      "relative_path": "oo3d9dsingle/bowl_009_bzjd4iqeis01suwwhsk0anphfsyioivk"
+    },
+    {
+      "scene_name": "bowl_010_u6j6g4b8bde2wv7cvdmynyb4kwsvaymy",
+      "category": "bowl",
+      "object_instance": "bowl_010",
+      "relative_path": "oo3d9dsingle/bowl_010_u6j6g4b8bde2wv7cvdmynyb4kwsvaymy"
+    },
+    {
+      "scene_name": "bowl_011_zvqru74ah6zwybgeermfb3ylkw2k25tr",
+      "category": "bowl",
+      "object_instance": "bowl_011",
+      "relative_path": "oo3d9dsingle/bowl_011_zvqru74ah6zwybgeermfb3ylkw2k25tr"
+    },
+    {
+      "scene_name": "bowl_014_ddcdzy5lmqlpjur5nqp5q6p7ymwn1618",
+      "category": "bowl",
+      "object_instance": "bowl_014",
+      "relative_path": "oo3d9dsingle/bowl_014_ddcdzy5lmqlpjur5nqp5q6p7ymwn1618"
+    },
+    {
+      "scene_name": "bowl_015_699029cgvgzdnktcln7i9uecminlunzu",
+      "category": "bowl",
+      "object_instance": "bowl_015",
+      "relative_path": "oo3d9dsingle/bowl_015_699029cgvgzdnktcln7i9uecminlunzu"
+    },
+    {
+      "scene_name": "bowl_016_f9vr6qyn7ck2qns7wicyqmezcwgugr4e",
+      "category": "bowl",
+      "object_instance": "bowl_016",
+      "relative_path": "oo3d9dsingle/bowl_016_f9vr6qyn7ck2qns7wicyqmezcwgugr4e"
+    },
+    {
+      "scene_name": "bowl_017_lkalk0n6aeof7aqcyirr50njtk95qh3y",
+      "category": "bowl",
+      "object_instance": "bowl_017",
+      "relative_path": "oo3d9dsingle/bowl_017_lkalk0n6aeof7aqcyirr50njtk95qh3y"
+    },
+    {
+      "scene_name": "bumbag_001_f30xo0c8y5fzle0wl9ds7lfh1nxv9siq",
+      "category": "bumbag",
+      "object_instance": "bumbag_001",
+      "relative_path": "oo3d9dsingle/bumbag_001_f30xo0c8y5fzle0wl9ds7lfh1nxv9siq"
+    },
+    {
+      "scene_name": "bumbag_002_vpmkdcyd9wpjour4g084zmhtdrd9qohv",
+      "category": "bumbag",
+      "object_instance": "bumbag_002",
+      "relative_path": "oo3d9dsingle/bumbag_002_vpmkdcyd9wpjour4g084zmhtdrd9qohv"
+    },
+    {
+      "scene_name": "bumbag_003_wlhfskaa3tb63f51jz2f519ay4ieah6w",
+      "category": "bumbag",
+      "object_instance": "bumbag_003",
+      "relative_path": "oo3d9dsingle/bumbag_003_wlhfskaa3tb63f51jz2f519ay4ieah6w"
+    },
+    {
+      "scene_name": "bumbag_004_oatstusuv3ocjiopuswe69yrsy35v0a5",
+      "category": "bumbag",
+      "object_instance": "bumbag_004",
+      "relative_path": "oo3d9dsingle/bumbag_004_oatstusuv3ocjiopuswe69yrsy35v0a5"
+    },
+    {
+      "scene_name": "bumbag_005_m34cjhawfc9c7k2a4ij6euay3ugwy539",
+      "category": "bumbag",
+      "object_instance": "bumbag_005",
+      "relative_path": "oo3d9dsingle/bumbag_005_m34cjhawfc9c7k2a4ij6euay3ugwy539"
+    },
+    {
+      "scene_name": "bumbag_006_ha2f9uh2hkyhh5bhu5s2t6f60z1r5rcv",
+      "category": "bumbag",
+      "object_instance": "bumbag_006",
+      "relative_path": "oo3d9dsingle/bumbag_006_ha2f9uh2hkyhh5bhu5s2t6f60z1r5rcv"
+    },
+    {
+      "scene_name": "bumbag_007_ut5y9conheurpmw4v3faf4jyz7y4yv28",
+      "category": "bumbag",
+      "object_instance": "bumbag_007",
+      "relative_path": "oo3d9dsingle/bumbag_007_ut5y9conheurpmw4v3faf4jyz7y4yv28"
+    },
+    {
+      "scene_name": "bumbag_008_7j26lewv8dnmainrjcbj1aviqg9qmt6v",
+      "category": "bumbag",
+      "object_instance": "bumbag_008",
+      "relative_path": "oo3d9dsingle/bumbag_008_7j26lewv8dnmainrjcbj1aviqg9qmt6v"
+    },
+    {
+      "scene_name": "bumbag_009_8r7z69q0w9ndoranper5v07rv7oy83pg",
+      "category": "bumbag",
+      "object_instance": "bumbag_009",
+      "relative_path": "oo3d9dsingle/bumbag_009_8r7z69q0w9ndoranper5v07rv7oy83pg"
+    },
+    {
+      "scene_name": "dumpling_001_8fqldhh7dn3qz10fn1l7ikwa8g66d3jl",
+      "category": "dumpling",
+      "object_instance": "dumpling_001",
+      "relative_path": "oo3d9dsingle/dumpling_001_8fqldhh7dn3qz10fn1l7ikwa8g66d3jl"
+    },
+    {
+      "scene_name": "dumpling_002_cpo237r4yapnm6go3e6k937aj2jxma9x",
+      "category": "dumpling",
+      "object_instance": "dumpling_002",
+      "relative_path": "oo3d9dsingle/dumpling_002_cpo237r4yapnm6go3e6k937aj2jxma9x"
+    },
+    {
+      "scene_name": "dumpling_003_nu514cbkw9ob256idd9dgf2gl2keq39t",
+      "category": "dumpling",
+      "object_instance": "dumpling_003",
+      "relative_path": "oo3d9dsingle/dumpling_003_nu514cbkw9ob256idd9dgf2gl2keq39t"
+    },
+    {
+      "scene_name": "dumpling_004_r6u629w8kw741rjzctmuuhp7dcjm2lud",
+      "category": "dumpling",
+      "object_instance": "dumpling_004",
+      "relative_path": "oo3d9dsingle/dumpling_004_r6u629w8kw741rjzctmuuhp7dcjm2lud"
+    },
+    {
+      "scene_name": "dumpling_005_mj6t5lyont7n6brley0wo5g9dcmmivdl",
+      "category": "dumpling",
+      "object_instance": "dumpling_005",
+      "relative_path": "oo3d9dsingle/dumpling_005_mj6t5lyont7n6brley0wo5g9dcmmivdl"
+    },
+    {
+      "scene_name": "dumpling_006_3irybxwi93fgmy80fful4i17vc9nrndk",
+      "category": "dumpling",
+      "object_instance": "dumpling_006",
+      "relative_path": "oo3d9dsingle/dumpling_006_3irybxwi93fgmy80fful4i17vc9nrndk"
+    },
+    {
+      "scene_name": "dumpling_012_mhzfxm0k58vlz74oj3367l0jqw0nbk0h",
+      "category": "dumpling",
+      "object_instance": "dumpling_012",
+      "relative_path": "oo3d9dsingle/dumpling_012_mhzfxm0k58vlz74oj3367l0jqw0nbk0h"
+    },
+    {
+      "scene_name": "dumpling_013_pun5pct8xmiw5gp4mu1r07hlnmscowsr",
+      "category": "dumpling",
+      "object_instance": "dumpling_013",
+      "relative_path": "oo3d9dsingle/dumpling_013_pun5pct8xmiw5gp4mu1r07hlnmscowsr"
+    },
+    {
+      "scene_name": "dumpling_014_xg50ropg7j0c2lgl6drd11zram1zdwea",
+      "category": "dumpling",
+      "object_instance": "dumpling_014",
+      "relative_path": "oo3d9dsingle/dumpling_014_xg50ropg7j0c2lgl6drd11zram1zdwea"
+    },
+    {
+      "scene_name": "dumpling_015_c70hnls60ucucavov15m1mywgwelna9v",
+      "category": "dumpling",
+      "object_instance": "dumpling_015",
+      "relative_path": "oo3d9dsingle/dumpling_015_c70hnls60ucucavov15m1mywgwelna9v"
+    },
+    {
+      "scene_name": "dumpling_016_d2m4gbaqbm0dallzciuw2owcbtz10ijw",
+      "category": "dumpling",
+      "object_instance": "dumpling_016",
+      "relative_path": "oo3d9dsingle/dumpling_016_d2m4gbaqbm0dallzciuw2owcbtz10ijw"
+    },
+    {
+      "scene_name": "dumpling_017_ble6ujfnx0jtde43apm5kum5xuxu2b2q",
+      "category": "dumpling",
+      "object_instance": "dumpling_017",
+      "relative_path": "oo3d9dsingle/dumpling_017_ble6ujfnx0jtde43apm5kum5xuxu2b2q"
+    },
+    {
+      "scene_name": "dumpling_020_ziln6nwop01vtceyw1o7wv18ybgdyiyb",
+      "category": "dumpling",
+      "object_instance": "dumpling_020",
+      "relative_path": "oo3d9dsingle/dumpling_020_ziln6nwop01vtceyw1o7wv18ybgdyiyb"
+    },
+    {
+      "scene_name": "dumpling_022_8jgnh7xq0q6v1a0lxsxox0wc4u7vcagq",
+      "category": "dumpling",
+      "object_instance": "dumpling_022",
+      "relative_path": "oo3d9dsingle/dumpling_022_8jgnh7xq0q6v1a0lxsxox0wc4u7vcagq"
+    },
+    {
+      "scene_name": "dumpling_026_wllu4iv9jk61e19mbdncowyxk13mh4q0",
+      "category": "dumpling",
+      "object_instance": "dumpling_026",
+      "relative_path": "oo3d9dsingle/dumpling_026_wllu4iv9jk61e19mbdncowyxk13mh4q0"
+    },
+    {
+      "scene_name": "dumpling_027_7mn4frict15onl0fnkrm8h6w8u72xbbc",
+      "category": "dumpling",
+      "object_instance": "dumpling_027",
+      "relative_path": "oo3d9dsingle/dumpling_027_7mn4frict15onl0fnkrm8h6w8u72xbbc"
+    },
+    {
+      "scene_name": "dumpling_028_t5rlk31fjfm2jz2twxkn9zfd0xq1rnkg",
+      "category": "dumpling",
+      "object_instance": "dumpling_028",
+      "relative_path": "oo3d9dsingle/dumpling_028_t5rlk31fjfm2jz2twxkn9zfd0xq1rnkg"
+    },
+    {
+      "scene_name": "dumpling_029_f7kjyjnqvuwrwtqw7y8h5lcseohx3eos",
+      "category": "dumpling",
+      "object_instance": "dumpling_029",
+      "relative_path": "oo3d9dsingle/dumpling_029_f7kjyjnqvuwrwtqw7y8h5lcseohx3eos"
+    },
+    {
+      "scene_name": "dumpling_030_rwll0fdsz9xk7sv5m21p8z5poeiitknf",
+      "category": "dumpling",
+      "object_instance": "dumpling_030",
+      "relative_path": "oo3d9dsingle/dumpling_030_rwll0fdsz9xk7sv5m21p8z5poeiitknf"
+    },
+    {
+      "scene_name": "dumpling_031_bxlrvpql70xirmqyt5qx1sa5gbmb075d",
+      "category": "dumpling",
+      "object_instance": "dumpling_031",
+      "relative_path": "oo3d9dsingle/dumpling_031_bxlrvpql70xirmqyt5qx1sa5gbmb075d"
+    },
+    {
+      "scene_name": "dumpling_033_bbh1c2y2gqsr031cddh5czoxq8uba7cj",
+      "category": "dumpling",
+      "object_instance": "dumpling_033",
+      "relative_path": "oo3d9dsingle/dumpling_033_bbh1c2y2gqsr031cddh5czoxq8uba7cj"
+    },
+    {
+      "scene_name": "dumpling_035_llrn9g23tagkw9spmudq9t8ftpwfsipo",
+      "category": "dumpling",
+      "object_instance": "dumpling_035",
+      "relative_path": "oo3d9dsingle/dumpling_035_llrn9g23tagkw9spmudq9t8ftpwfsipo"
+    },
+    {
+      "scene_name": "facial_cream_001_2f46nydhh817pnobfn3pz00q9klhgvtp",
+      "category": "facial_cream",
+      "object_instance": "facial_cream_001",
+      "relative_path": "oo3d9dsingle/facial_cream_001_2f46nydhh817pnobfn3pz00q9klhgvtp"
+    },
+    {
+      "scene_name": "facial_cream_002_a2pk5d16shwols9vntdl9ph5l2it17qf",
+      "category": "facial_cream",
+      "object_instance": "facial_cream_002",
+      "relative_path": "oo3d9dsingle/facial_cream_002_a2pk5d16shwols9vntdl9ph5l2it17qf"
+    },
+    {
+      "scene_name": "facial_cream_003_d0j4a1vge3gicmkitamopg2na8me2ke6",
+      "category": "facial_cream",
+      "object_instance": "facial_cream_003",
+      "relative_path": "oo3d9dsingle/facial_cream_003_d0j4a1vge3gicmkitamopg2na8me2ke6"
+    },
+    {
+      "scene_name": "facial_cream_004_auz2b6i14vpy9f1ax9vpkorha67moviw",
+      "category": "facial_cream",
+      "object_instance": "facial_cream_004",
+      "relative_path": "oo3d9dsingle/facial_cream_004_auz2b6i14vpy9f1ax9vpkorha67moviw"
+    },
+    {
+      "scene_name": "facial_cream_005_0qk34e7lcb54ny346aos6u4t3zqrfpqn",
+      "category": "facial_cream",
+      "object_instance": "facial_cream_005",
+      "relative_path": "oo3d9dsingle/facial_cream_005_0qk34e7lcb54ny346aos6u4t3zqrfpqn"
+    },
+    {
+      "scene_name": "facial_cream_006_guedmecy1nac99zwprlehpzve97gg036",
+      "category": "facial_cream",
+      "object_instance": "facial_cream_006",
+      "relative_path": "oo3d9dsingle/facial_cream_006_guedmecy1nac99zwprlehpzve97gg036"
+    },
+    {
+      "scene_name": "facial_cream_007_podh59nv7pff45d1digygahywmxweam6",
+      "category": "facial_cream",
+      "object_instance": "facial_cream_007",
+      "relative_path": "oo3d9dsingle/facial_cream_007_podh59nv7pff45d1digygahywmxweam6"
+    },
+    {
+      "scene_name": "facial_cream_008_ft1tjw5lqc7so0aby8jjjyah7zp06yed",
+      "category": "facial_cream",
+      "object_instance": "facial_cream_008",
+      "relative_path": "oo3d9dsingle/facial_cream_008_ft1tjw5lqc7so0aby8jjjyah7zp06yed"
+    },
+    {
+      "scene_name": "facial_cream_009_erup6tf9zt6k9uj829y9riqwxuwvdkyn",
+      "category": "facial_cream",
+      "object_instance": "facial_cream_009",
+      "relative_path": "oo3d9dsingle/facial_cream_009_erup6tf9zt6k9uj829y9riqwxuwvdkyn"
+    },
+    {
+      "scene_name": "facial_cream_010_0benmnox4k03d98jqvqkw2n48g1wohia",
+      "category": "facial_cream",
+      "object_instance": "facial_cream_010",
+      "relative_path": "oo3d9dsingle/facial_cream_010_0benmnox4k03d98jqvqkw2n48g1wohia"
+    },
+    {
+      "scene_name": "facial_cream_011_j184mueguvup6bsi62qqh2eh99v6h546",
+      "category": "facial_cream",
+      "object_instance": "facial_cream_011",
+      "relative_path": "oo3d9dsingle/facial_cream_011_j184mueguvup6bsi62qqh2eh99v6h546"
+    },
+    {
+      "scene_name": "facial_cream_012_tpwpvi804bqa2c54ijt7k4kwmg8ei4dy",
+      "category": "facial_cream",
+      "object_instance": "facial_cream_012",
+      "relative_path": "oo3d9dsingle/facial_cream_012_tpwpvi804bqa2c54ijt7k4kwmg8ei4dy"
+    },
+    {
+      "scene_name": "facial_cream_013_6tvnjgab49gjohs0v7kb2bwzqf7a2jqa",
+      "category": "facial_cream",
+      "object_instance": "facial_cream_013",
+      "relative_path": "oo3d9dsingle/facial_cream_013_6tvnjgab49gjohs0v7kb2bwzqf7a2jqa"
+    },
+    {
+      "scene_name": "facial_cream_014_urvnsgen2vlge5kf9r0wd2zca2ecvsvt",
+      "category": "facial_cream",
+      "object_instance": "facial_cream_014",
+      "relative_path": "oo3d9dsingle/facial_cream_014_urvnsgen2vlge5kf9r0wd2zca2ecvsvt"
+    },
+    {
+      "scene_name": "facial_cream_015_435iqbwdk5kkpl7u2qtao6evo8llacmx",
+      "category": "facial_cream",
+      "object_instance": "facial_cream_015",
+      "relative_path": "oo3d9dsingle/facial_cream_015_435iqbwdk5kkpl7u2qtao6evo8llacmx"
+    },
+    {
+      "scene_name": "handbag_001_wihrugri11t3klcmgixxozbuk0112brx",
+      "category": "handbag",
+      "object_instance": "handbag_001",
+      "relative_path": "oo3d9dsingle/handbag_001_wihrugri11t3klcmgixxozbuk0112brx"
+    },
+    {
+      "scene_name": "handbag_002_gxvzy723j4oy18fr0o7ix140i274ve1v",
+      "category": "handbag",
+      "object_instance": "handbag_002",
+      "relative_path": "oo3d9dsingle/handbag_002_gxvzy723j4oy18fr0o7ix140i274ve1v"
+    },
+    {
+      "scene_name": "handbag_004_6nxbi2yk615j87fh04jou14zt7lze8sg",
+      "category": "handbag",
+      "object_instance": "handbag_004",
+      "relative_path": "oo3d9dsingle/handbag_004_6nxbi2yk615j87fh04jou14zt7lze8sg"
+    },
+    {
+      "scene_name": "handbag_005_sjr45n3qpr9poklsgd3w6uuilhc83hsf",
+      "category": "handbag",
+      "object_instance": "handbag_005",
+      "relative_path": "oo3d9dsingle/handbag_005_sjr45n3qpr9poklsgd3w6uuilhc83hsf"
+    },
+    {
+      "scene_name": "handbag_006_i5koxq3bk32t5hsoevqk067aqkfe9bfz",
+      "category": "handbag",
+      "object_instance": "handbag_006",
+      "relative_path": "oo3d9dsingle/handbag_006_i5koxq3bk32t5hsoevqk067aqkfe9bfz"
+    },
+    {
+      "scene_name": "handbag_007_cv2zl7wxpewfp1f8vvtgosjhp1p14rd2",
+      "category": "handbag",
+      "object_instance": "handbag_007",
+      "relative_path": "oo3d9dsingle/handbag_007_cv2zl7wxpewfp1f8vvtgosjhp1p14rd2"
+    },
+    {
+      "scene_name": "handbag_009_a92hkqig0t4u66jwniy7wnht56stn2jv",
+      "category": "handbag",
+      "object_instance": "handbag_009",
+      "relative_path": "oo3d9dsingle/handbag_009_a92hkqig0t4u66jwniy7wnht56stn2jv"
+    },
+    {
+      "scene_name": "handbag_010_ec546ft7oaabzr86c8sar7oyvfnke30s",
+      "category": "handbag",
+      "object_instance": "handbag_010",
+      "relative_path": "oo3d9dsingle/handbag_010_ec546ft7oaabzr86c8sar7oyvfnke30s"
+    },
+    {
+      "scene_name": "handbag_012_774rdk1hadz7u931kcxjee6sg6fd1bjw",
+      "category": "handbag",
+      "object_instance": "handbag_012",
+      "relative_path": "oo3d9dsingle/handbag_012_774rdk1hadz7u931kcxjee6sg6fd1bjw"
+    },
+    {
+      "scene_name": "handbag_014_mb6mail4knum189wr6pbaoxk7iivfpyt",
+      "category": "handbag",
+      "object_instance": "handbag_014",
+      "relative_path": "oo3d9dsingle/handbag_014_mb6mail4knum189wr6pbaoxk7iivfpyt"
+    },
+    {
+      "scene_name": "handbag_015_7nwo8abpsfqnlxxz25weoflj73vo47hk",
+      "category": "handbag",
+      "object_instance": "handbag_015",
+      "relative_path": "oo3d9dsingle/handbag_015_7nwo8abpsfqnlxxz25weoflj73vo47hk"
+    },
+    {
+      "scene_name": "handbag_016_760tawxxx7le6pbacbsyrzfhdth12dd6",
+      "category": "handbag",
+      "object_instance": "handbag_016",
+      "relative_path": "oo3d9dsingle/handbag_016_760tawxxx7le6pbacbsyrzfhdth12dd6"
+    },
+    {
+      "scene_name": "handbag_017_wr9qljxfr1lwbcvg33curjs1vxsgjuz3",
+      "category": "handbag",
+      "object_instance": "handbag_017",
+      "relative_path": "oo3d9dsingle/handbag_017_wr9qljxfr1lwbcvg33curjs1vxsgjuz3"
+    },
+    {
+      "scene_name": "handbag_018_vsaptlbggxh2wp2ecyqb75l6zd2hkgb3",
+      "category": "handbag",
+      "object_instance": "handbag_018",
+      "relative_path": "oo3d9dsingle/handbag_018_vsaptlbggxh2wp2ecyqb75l6zd2hkgb3"
+    },
+    {
+      "scene_name": "handbag_019_c89f3lal4ylied080ev79rfh9td2o2t1",
+      "category": "handbag",
+      "object_instance": "handbag_019",
+      "relative_path": "oo3d9dsingle/handbag_019_c89f3lal4ylied080ev79rfh9td2o2t1"
+    },
+    {
+      "scene_name": "handbag_021_56alnxizi3zlmvl27nq0r08u4y7badjl",
+      "category": "handbag",
+      "object_instance": "handbag_021",
+      "relative_path": "oo3d9dsingle/handbag_021_56alnxizi3zlmvl27nq0r08u4y7badjl"
+    },
+    {
+      "scene_name": "handbag_022_l9pit6299h6qj9b08h937dtqzov56w06",
+      "category": "handbag",
+      "object_instance": "handbag_022",
+      "relative_path": "oo3d9dsingle/handbag_022_l9pit6299h6qj9b08h937dtqzov56w06"
+    },
+    {
+      "scene_name": "handbag_023_3egh9yscwb3gnvk1nejr5fwaxirerxyh",
+      "category": "handbag",
+      "object_instance": "handbag_023",
+      "relative_path": "oo3d9dsingle/handbag_023_3egh9yscwb3gnvk1nejr5fwaxirerxyh"
+    },
+    {
+      "scene_name": "handbag_024_v77b88asocem0obx0gcofbeberswrjev",
+      "category": "handbag",
+      "object_instance": "handbag_024",
+      "relative_path": "oo3d9dsingle/handbag_024_v77b88asocem0obx0gcofbeberswrjev"
+    },
+    {
+      "scene_name": "handbag_025_6zoh1o7ij3okje1qqj5zgkfle73tcdg0",
+      "category": "handbag",
+      "object_instance": "handbag_025",
+      "relative_path": "oo3d9dsingle/handbag_025_6zoh1o7ij3okje1qqj5zgkfle73tcdg0"
+    },
+    {
+      "scene_name": "handbag_026_fwo7x5zw1jee0hufredg6ljyqxif8o4b",
+      "category": "handbag",
+      "object_instance": "handbag_026",
+      "relative_path": "oo3d9dsingle/handbag_026_fwo7x5zw1jee0hufredg6ljyqxif8o4b"
+    },
+    {
+      "scene_name": "handbag_027_k8mo6psx3labjxq5opdd61kw57zm8mpw",
+      "category": "handbag",
+      "object_instance": "handbag_027",
+      "relative_path": "oo3d9dsingle/handbag_027_k8mo6psx3labjxq5opdd61kw57zm8mpw"
+    },
+    {
+      "scene_name": "handbag_028_qhyu6ih0pk4rzanp4v15mbgu5eb1kj99",
+      "category": "handbag",
+      "object_instance": "handbag_028",
+      "relative_path": "oo3d9dsingle/handbag_028_qhyu6ih0pk4rzanp4v15mbgu5eb1kj99"
+    },
+    {
+      "scene_name": "handbag_029_8b40xk151p1dalt8f9979jc28a08hszx",
+      "category": "handbag",
+      "object_instance": "handbag_029",
+      "relative_path": "oo3d9dsingle/handbag_029_8b40xk151p1dalt8f9979jc28a08hszx"
+    },
+    {
+      "scene_name": "handbag_030_rzgcrnbug48sn7misc07m74l18d8q6if",
+      "category": "handbag",
+      "object_instance": "handbag_030",
+      "relative_path": "oo3d9dsingle/handbag_030_rzgcrnbug48sn7misc07m74l18d8q6if"
+    },
+    {
+      "scene_name": "handbag_031_i4xypzqzctbav3l0dha7eyl0yj389uqg",
+      "category": "handbag",
+      "object_instance": "handbag_031",
+      "relative_path": "oo3d9dsingle/handbag_031_i4xypzqzctbav3l0dha7eyl0yj389uqg"
+    },
+    {
+      "scene_name": "handbag_032_cqc1vo716u71kdoq3r4xiqp1v3y5ovhd",
+      "category": "handbag",
+      "object_instance": "handbag_032",
+      "relative_path": "oo3d9dsingle/handbag_032_cqc1vo716u71kdoq3r4xiqp1v3y5ovhd"
+    },
+    {
+      "scene_name": "handbag_033_phw90bnymu1y6z8b9kpj4oqx5paobqrg",
+      "category": "handbag",
+      "object_instance": "handbag_033",
+      "relative_path": "oo3d9dsingle/handbag_033_phw90bnymu1y6z8b9kpj4oqx5paobqrg"
+    },
+    {
+      "scene_name": "handbag_034_9yq0sr655c5q3lwdc1t92vqxbesdo0ru",
+      "category": "handbag",
+      "object_instance": "handbag_034",
+      "relative_path": "oo3d9dsingle/handbag_034_9yq0sr655c5q3lwdc1t92vqxbesdo0ru"
+    },
+    {
+      "scene_name": "handbag_035_qi9ai3kw4rxu9v61kwe05te00wcxn57x",
+      "category": "handbag",
+      "object_instance": "handbag_035",
+      "relative_path": "oo3d9dsingle/handbag_035_qi9ai3kw4rxu9v61kwe05te00wcxn57x"
+    },
+    {
+      "scene_name": "handbag_037_voj8nt4acugrh9i5ill9d6dhnm0cmsft",
+      "category": "handbag",
+      "object_instance": "handbag_037",
+      "relative_path": "oo3d9dsingle/handbag_037_voj8nt4acugrh9i5ill9d6dhnm0cmsft"
+    },
+    {
+      "scene_name": "handbag_038_jfd718zmdizo5wiftim36wzd6mgdxkri",
+      "category": "handbag",
+      "object_instance": "handbag_038",
+      "relative_path": "oo3d9dsingle/handbag_038_jfd718zmdizo5wiftim36wzd6mgdxkri"
+    },
+    {
+      "scene_name": "handbag_039_viiiau4o4tw8id2i14a8dpjiz3ow1fj9",
+      "category": "handbag",
+      "object_instance": "handbag_039",
+      "relative_path": "oo3d9dsingle/handbag_039_viiiau4o4tw8id2i14a8dpjiz3ow1fj9"
+    },
+    {
+      "scene_name": "handbag_040_w8l9xg9qr28qn8sne9xhzy2rodqtoj8e",
+      "category": "handbag",
+      "object_instance": "handbag_040",
+      "relative_path": "oo3d9dsingle/handbag_040_w8l9xg9qr28qn8sne9xhzy2rodqtoj8e"
+    },
+    {
+      "scene_name": "handbag_041_z9kwnr1gkr0unb7bgl2g6w9j7x1o4c13",
+      "category": "handbag",
+      "object_instance": "handbag_041",
+      "relative_path": "oo3d9dsingle/handbag_041_z9kwnr1gkr0unb7bgl2g6w9j7x1o4c13"
+    },
+    {
+      "scene_name": "handbag_042_zokrzvr0rovbsc1yu275ajfdg7n2awd5",
+      "category": "handbag",
+      "object_instance": "handbag_042",
+      "relative_path": "oo3d9dsingle/handbag_042_zokrzvr0rovbsc1yu275ajfdg7n2awd5"
+    },
+    {
+      "scene_name": "handbag_043_vstnzvr2lkmxf2k0xpbr435hoqtu2hdo",
+      "category": "handbag",
+      "object_instance": "handbag_043",
+      "relative_path": "oo3d9dsingle/handbag_043_vstnzvr2lkmxf2k0xpbr435hoqtu2hdo"
+    },
+    {
+      "scene_name": "handbag_044_wh3a011cfvoigkc1ylycuq8ft0u0phnb",
+      "category": "handbag",
+      "object_instance": "handbag_044",
+      "relative_path": "oo3d9dsingle/handbag_044_wh3a011cfvoigkc1ylycuq8ft0u0phnb"
+    },
+    {
+      "scene_name": "handbag_045_dbmj49aar555scl8w3olxm7afph44ekl",
+      "category": "handbag",
+      "object_instance": "handbag_045",
+      "relative_path": "oo3d9dsingle/handbag_045_dbmj49aar555scl8w3olxm7afph44ekl"
+    },
+    {
+      "scene_name": "handbag_046_0v90yzufjskl3zcu1nj1rpp9xkl31qqz",
+      "category": "handbag",
+      "object_instance": "handbag_046",
+      "relative_path": "oo3d9dsingle/handbag_046_0v90yzufjskl3zcu1nj1rpp9xkl31qqz"
+    },
+    {
+      "scene_name": "handbag_047_tzvfllhwq388e9w1tivdi3f3tsx8mhbq",
+      "category": "handbag",
+      "object_instance": "handbag_047",
+      "relative_path": "oo3d9dsingle/handbag_047_tzvfllhwq388e9w1tivdi3f3tsx8mhbq"
+    },
+    {
+      "scene_name": "handbag_048_pfef0h9y8uzyk72ai4eq9uexummkcffi",
+      "category": "handbag",
+      "object_instance": "handbag_048",
+      "relative_path": "oo3d9dsingle/handbag_048_pfef0h9y8uzyk72ai4eq9uexummkcffi"
+    },
+    {
+      "scene_name": "handbag_049_rfyv3maoci2yzlr8k7xhonodb6n0xirk",
+      "category": "handbag",
+      "object_instance": "handbag_049",
+      "relative_path": "oo3d9dsingle/handbag_049_rfyv3maoci2yzlr8k7xhonodb6n0xirk"
+    },
+    {
+      "scene_name": "handbag_050_o7wavexd62ct5ub4320l17aaky3s731k",
+      "category": "handbag",
+      "object_instance": "handbag_050",
+      "relative_path": "oo3d9dsingle/handbag_050_o7wavexd62ct5ub4320l17aaky3s731k"
+    },
+    {
+      "scene_name": "handbag_051_ks0jtcstc3fuu5ofw9189wrj8slf29n3",
+      "category": "handbag",
+      "object_instance": "handbag_051",
+      "relative_path": "oo3d9dsingle/handbag_051_ks0jtcstc3fuu5ofw9189wrj8slf29n3"
+    },
+    {
+      "scene_name": "handbag_052_xhsybxfzskyrpevtg2zb0u2bxky568cp",
+      "category": "handbag",
+      "object_instance": "handbag_052",
+      "relative_path": "oo3d9dsingle/handbag_052_xhsybxfzskyrpevtg2zb0u2bxky568cp"
+    },
+    {
+      "scene_name": "handbag_053_h45ot1l6jiodoegkloza3p1s91bt13z5",
+      "category": "handbag",
+      "object_instance": "handbag_053",
+      "relative_path": "oo3d9dsingle/handbag_053_h45ot1l6jiodoegkloza3p1s91bt13z5"
+    },
+    {
+      "scene_name": "handbag_054_9wahysaxwbip7t85wwhe1bmbv868sf2h",
+      "category": "handbag",
+      "object_instance": "handbag_054",
+      "relative_path": "oo3d9dsingle/handbag_054_9wahysaxwbip7t85wwhe1bmbv868sf2h"
+    },
+    {
+      "scene_name": "litchi_001_bgl5ckwgtdsn6sctu9mqc5cajl400z83",
+      "category": "litchi",
+      "object_instance": "litchi_001",
+      "relative_path": "oo3d9dsingle/litchi_001_bgl5ckwgtdsn6sctu9mqc5cajl400z83"
+    },
+    {
+      "scene_name": "litchi_002_ek8w7k3g6kv2r3efig7maqfasxpmdgdt",
+      "category": "litchi",
+      "object_instance": "litchi_002",
+      "relative_path": "oo3d9dsingle/litchi_002_ek8w7k3g6kv2r3efig7maqfasxpmdgdt"
+    },
+    {
+      "scene_name": "litchi_003_vvktrcpwx5ponbbzz8zqi3c2uot81aiq",
+      "category": "litchi",
+      "object_instance": "litchi_003",
+      "relative_path": "oo3d9dsingle/litchi_003_vvktrcpwx5ponbbzz8zqi3c2uot81aiq"
+    },
+    {
+      "scene_name": "litchi_005_eehjmtg7v5at05bb3qypshsjmfa9dom8",
+      "category": "litchi",
+      "object_instance": "litchi_005",
+      "relative_path": "oo3d9dsingle/litchi_005_eehjmtg7v5at05bb3qypshsjmfa9dom8"
+    },
+    {
+      "scene_name": "litchi_006_qhbtmxntrryz0s12q7qhlum79gir7mpq",
+      "category": "litchi",
+      "object_instance": "litchi_006",
+      "relative_path": "oo3d9dsingle/litchi_006_qhbtmxntrryz0s12q7qhlum79gir7mpq"
+    },
+    {
+      "scene_name": "litchi_007_vs9mrprsw1bcjemtevc0i8dgdqpurdxt",
+      "category": "litchi",
+      "object_instance": "litchi_007",
+      "relative_path": "oo3d9dsingle/litchi_007_vs9mrprsw1bcjemtevc0i8dgdqpurdxt"
+    },
+    {
+      "scene_name": "litchi_008_uztgc93j9t5j6dp3ezqfxk3pu7er7vio",
+      "category": "litchi",
+      "object_instance": "litchi_008",
+      "relative_path": "oo3d9dsingle/litchi_008_uztgc93j9t5j6dp3ezqfxk3pu7er7vio"
+    },
+    {
+      "scene_name": "litchi_009_31fz95oz7pglzsvopba2et6cpldinxzx",
+      "category": "litchi",
+      "object_instance": "litchi_009",
+      "relative_path": "oo3d9dsingle/litchi_009_31fz95oz7pglzsvopba2et6cpldinxzx"
+    },
+    {
+      "scene_name": "litchi_010_2gema7jmqxi4hp36javw6o87vw4bylua",
+      "category": "litchi",
+      "object_instance": "litchi_010",
+      "relative_path": "oo3d9dsingle/litchi_010_2gema7jmqxi4hp36javw6o87vw4bylua"
+    },
+    {
+      "scene_name": "litchi_011_o9lwd8fxpw4qgj47qfbfrqqi2tsvnrvi",
+      "category": "litchi",
+      "object_instance": "litchi_011",
+      "relative_path": "oo3d9dsingle/litchi_011_o9lwd8fxpw4qgj47qfbfrqqi2tsvnrvi"
+    },
+    {
+      "scene_name": "litchi_012_9qqe7pq8dgfs2gkxc2gcd0gui3kma6jl",
+      "category": "litchi",
+      "object_instance": "litchi_012",
+      "relative_path": "oo3d9dsingle/litchi_012_9qqe7pq8dgfs2gkxc2gcd0gui3kma6jl"
+    },
+    {
+      "scene_name": "litchi_013_m33wqq6x5cfn8mbpzdj514e4e4kna986",
+      "category": "litchi",
+      "object_instance": "litchi_013",
+      "relative_path": "oo3d9dsingle/litchi_013_m33wqq6x5cfn8mbpzdj514e4e4kna986"
+    },
+    {
+      "scene_name": "litchi_014_rfvub97nfzsha1kqs5zm384xakn9jh8t",
+      "category": "litchi",
+      "object_instance": "litchi_014",
+      "relative_path": "oo3d9dsingle/litchi_014_rfvub97nfzsha1kqs5zm384xakn9jh8t"
+    },
+    {
+      "scene_name": "litchi_015_l6sn3xnm3tfjra171ezo1z27sc3194qm",
+      "category": "litchi",
+      "object_instance": "litchi_015",
+      "relative_path": "oo3d9dsingle/litchi_015_l6sn3xnm3tfjra171ezo1z27sc3194qm"
+    },
+    {
+      "scene_name": "litchi_016_3i9q88ot89sss9mrzd4x024tm18xk5mp",
+      "category": "litchi",
+      "object_instance": "litchi_016",
+      "relative_path": "oo3d9dsingle/litchi_016_3i9q88ot89sss9mrzd4x024tm18xk5mp"
+    },
+    {
+      "scene_name": "litchi_025_cfkk3drzpc2tnfriu2p3ja3k5oro8ax9",
+      "category": "litchi",
+      "object_instance": "litchi_025",
+      "relative_path": "oo3d9dsingle/litchi_025_cfkk3drzpc2tnfriu2p3ja3k5oro8ax9"
+    },
+    {
+      "scene_name": "litchi_026_wz7h4hu8hv9dxqc941bd89vb9cq8fe8y",
+      "category": "litchi",
+      "object_instance": "litchi_026",
+      "relative_path": "oo3d9dsingle/litchi_026_wz7h4hu8hv9dxqc941bd89vb9cq8fe8y"
+    },
+    {
+      "scene_name": "litchi_027_o1gis2usg9793pwr2gbakwevg6mybayu",
+      "category": "litchi",
+      "object_instance": "litchi_027",
+      "relative_path": "oo3d9dsingle/litchi_027_o1gis2usg9793pwr2gbakwevg6mybayu"
+    },
+    {
+      "scene_name": "litchi_029_0mczcwpjugopq8j8oocb9wja3fu02u2w",
+      "category": "litchi",
+      "object_instance": "litchi_029",
+      "relative_path": "oo3d9dsingle/litchi_029_0mczcwpjugopq8j8oocb9wja3fu02u2w"
+    },
+    {
+      "scene_name": "litchi_030_afii8cj19unft1543y2dfk1sptj68prv",
+      "category": "litchi",
+      "object_instance": "litchi_030",
+      "relative_path": "oo3d9dsingle/litchi_030_afii8cj19unft1543y2dfk1sptj68prv"
+    },
+    {
+      "scene_name": "mouse_001_aoq7k6379xmatfk0b5ihrdq4vph5ihle",
+      "category": "mouse",
+      "object_instance": "mouse_001",
+      "relative_path": "oo3d9dsingle/mouse_001_aoq7k6379xmatfk0b5ihrdq4vph5ihle"
+    },
+    {
+      "scene_name": "mouse_002_oohxul6i9pjl4vg66skg1v75iohv5vge",
+      "category": "mouse",
+      "object_instance": "mouse_002",
+      "relative_path": "oo3d9dsingle/mouse_002_oohxul6i9pjl4vg66skg1v75iohv5vge"
+    },
+    {
+      "scene_name": "mouse_003_5sv74gdvke09o13qczp0k3srh0lgf6jl",
+      "category": "mouse",
+      "object_instance": "mouse_003",
+      "relative_path": "oo3d9dsingle/mouse_003_5sv74gdvke09o13qczp0k3srh0lgf6jl"
+    },
+    {
+      "scene_name": "mouse_004_fzj8ztgm9nuq1ssj59me7ar4lj5pwgpp",
+      "category": "mouse",
+      "object_instance": "mouse_004",
+      "relative_path": "oo3d9dsingle/mouse_004_fzj8ztgm9nuq1ssj59me7ar4lj5pwgpp"
+    },
+    {
+      "scene_name": "mouse_005_zo9x0mdcxku7m8kgrzyzetrts67dvs0k",
+      "category": "mouse",
+      "object_instance": "mouse_005",
+      "relative_path": "oo3d9dsingle/mouse_005_zo9x0mdcxku7m8kgrzyzetrts67dvs0k"
+    },
+    {
+      "scene_name": "mouse_006_lbss24od6ux44dgkedb3fhqisrth7wrx",
+      "category": "mouse",
+      "object_instance": "mouse_006",
+      "relative_path": "oo3d9dsingle/mouse_006_lbss24od6ux44dgkedb3fhqisrth7wrx"
+    },
+    {
+      "scene_name": "mouse_007_xshsau287a1igr3fv242gqajymrthe0l",
+      "category": "mouse",
+      "object_instance": "mouse_007",
+      "relative_path": "oo3d9dsingle/mouse_007_xshsau287a1igr3fv242gqajymrthe0l"
+    },
+    {
+      "scene_name": "mouse_008_pem4m1x8hbnilj9zmcfrdcnhyj4xg7hl",
+      "category": "mouse",
+      "object_instance": "mouse_008",
+      "relative_path": "oo3d9dsingle/mouse_008_pem4m1x8hbnilj9zmcfrdcnhyj4xg7hl"
+    },
+    {
+      "scene_name": "mouse_009_9o7knohaopweg5z2rhbt76065owifwiy",
+      "category": "mouse",
+      "object_instance": "mouse_009",
+      "relative_path": "oo3d9dsingle/mouse_009_9o7knohaopweg5z2rhbt76065owifwiy"
+    },
+    {
+      "scene_name": "mouse_010_omlet4f0e1hazep4d0qgjylmjbmy5vhd",
+      "category": "mouse",
+      "object_instance": "mouse_010",
+      "relative_path": "oo3d9dsingle/mouse_010_omlet4f0e1hazep4d0qgjylmjbmy5vhd"
+    },
+    {
+      "scene_name": "mouse_011_0c75xsb6bmuebmyjyly0eaq8z2bwsnz3",
+      "category": "mouse",
+      "object_instance": "mouse_011",
+      "relative_path": "oo3d9dsingle/mouse_011_0c75xsb6bmuebmyjyly0eaq8z2bwsnz3"
+    },
+    {
+      "scene_name": "mouse_012_813v4flono4dqvnibaam4kwfpbj3akiv",
+      "category": "mouse",
+      "object_instance": "mouse_012",
+      "relative_path": "oo3d9dsingle/mouse_012_813v4flono4dqvnibaam4kwfpbj3akiv"
+    },
+    {
+      "scene_name": "mouse_013_hhtr5j5tpv9evqqlgvc6m3dlq46tmtjd",
+      "category": "mouse",
+      "object_instance": "mouse_013",
+      "relative_path": "oo3d9dsingle/mouse_013_hhtr5j5tpv9evqqlgvc6m3dlq46tmtjd"
+    },
+    {
+      "scene_name": "mouse_014_23qhtq8mztdk7sfr5cvufywuxu06ucjx",
+      "category": "mouse",
+      "object_instance": "mouse_014",
+      "relative_path": "oo3d9dsingle/mouse_014_23qhtq8mztdk7sfr5cvufywuxu06ucjx"
+    },
+    {
+      "scene_name": "mouse_015_7j1yfxgjnf2jw4ey11ste0ft1ik2rcg4",
+      "category": "mouse",
+      "object_instance": "mouse_015",
+      "relative_path": "oo3d9dsingle/mouse_015_7j1yfxgjnf2jw4ey11ste0ft1ik2rcg4"
+    },
+    {
+      "scene_name": "mouse_016_zgo37bh0i5c1an3r9rwjtqbsyfs3s2rx",
+      "category": "mouse",
+      "object_instance": "mouse_016",
+      "relative_path": "oo3d9dsingle/mouse_016_zgo37bh0i5c1an3r9rwjtqbsyfs3s2rx"
+    },
+    {
+      "scene_name": "mouse_017_zebcwilwt5ldptgmcsdm8n4xoofqufvx",
+      "category": "mouse",
+      "object_instance": "mouse_017",
+      "relative_path": "oo3d9dsingle/mouse_017_zebcwilwt5ldptgmcsdm8n4xoofqufvx"
+    },
+    {
+      "scene_name": "mouse_018_79bqo21vieejt4lzviyjwyw38tu14v6k",
+      "category": "mouse",
+      "object_instance": "mouse_018",
+      "relative_path": "oo3d9dsingle/mouse_018_79bqo21vieejt4lzviyjwyw38tu14v6k"
+    },
+    {
+      "scene_name": "mouse_019_7ti02s5qmcdfpl9fffw2thh0uj5lzhpv",
+      "category": "mouse",
+      "object_instance": "mouse_019",
+      "relative_path": "oo3d9dsingle/mouse_019_7ti02s5qmcdfpl9fffw2thh0uj5lzhpv"
+    },
+    {
+      "scene_name": "mouse_020_4b76fdyj97cet2tvv1knkx6j58k4hzpd",
+      "category": "mouse",
+      "object_instance": "mouse_020",
+      "relative_path": "oo3d9dsingle/mouse_020_4b76fdyj97cet2tvv1knkx6j58k4hzpd"
+    },
+    {
+      "scene_name": "mouse_021_fzjapktg8l6x3smujqg1pzui3woowbfj",
+      "category": "mouse",
+      "object_instance": "mouse_021",
+      "relative_path": "oo3d9dsingle/mouse_021_fzjapktg8l6x3smujqg1pzui3woowbfj"
+    },
+    {
+      "scene_name": "mouse_022_0a02dkwf5ngdpo3k9opif3pm8mpmgge2",
+      "category": "mouse",
+      "object_instance": "mouse_022",
+      "relative_path": "oo3d9dsingle/mouse_022_0a02dkwf5ngdpo3k9opif3pm8mpmgge2"
+    },
+    {
+      "scene_name": "mouse_023_fw4tqw19889qigfxczd3kpx4v0x6dx0h",
+      "category": "mouse",
+      "object_instance": "mouse_023",
+      "relative_path": "oo3d9dsingle/mouse_023_fw4tqw19889qigfxczd3kpx4v0x6dx0h"
+    },
+    {
+      "scene_name": "mouse_024_ga4ak2u81q556v5pwe3je0ld8q0d69v1",
+      "category": "mouse",
+      "object_instance": "mouse_024",
+      "relative_path": "oo3d9dsingle/mouse_024_ga4ak2u81q556v5pwe3je0ld8q0d69v1"
+    },
+    {
+      "scene_name": "mouse_025_1zvcjxppgt3ljcmkz73atwu0rei0d5wh",
+      "category": "mouse",
+      "object_instance": "mouse_025",
+      "relative_path": "oo3d9dsingle/mouse_025_1zvcjxppgt3ljcmkz73atwu0rei0d5wh"
+    },
+    {
+      "scene_name": "mouse_027_e22t4f637o95m32d1sxtse75np5pkv9o",
+      "category": "mouse",
+      "object_instance": "mouse_027",
+      "relative_path": "oo3d9dsingle/mouse_027_e22t4f637o95m32d1sxtse75np5pkv9o"
+    },
+    {
+      "scene_name": "mouse_028_r3gn0es19axy4hd2ku34ldud5y87zg73",
+      "category": "mouse",
+      "object_instance": "mouse_028",
+      "relative_path": "oo3d9dsingle/mouse_028_r3gn0es19axy4hd2ku34ldud5y87zg73"
+    },
+    {
+      "scene_name": "mouse_029_11nhtvzubzwerngbz25h4zd6p3cc146t",
+      "category": "mouse",
+      "object_instance": "mouse_029",
+      "relative_path": "oo3d9dsingle/mouse_029_11nhtvzubzwerngbz25h4zd6p3cc146t"
+    },
+    {
+      "scene_name": "pineapple_001_nx13wb1qj9ps9rrsk89yq570djapbimh",
+      "category": "pineapple",
+      "object_instance": "pineapple_001",
+      "relative_path": "oo3d9dsingle/pineapple_001_nx13wb1qj9ps9rrsk89yq570djapbimh"
+    },
+    {
+      "scene_name": "pineapple_002_r6sm7g93hbfen8u9yeiysnyvserqwr31",
+      "category": "pineapple",
+      "object_instance": "pineapple_002",
+      "relative_path": "oo3d9dsingle/pineapple_002_r6sm7g93hbfen8u9yeiysnyvserqwr31"
+    },
+    {
+      "scene_name": "pineapple_003_5ebrmpzztz1t2srepel23w5vpczhn4xn",
+      "category": "pineapple",
+      "object_instance": "pineapple_003",
+      "relative_path": "oo3d9dsingle/pineapple_003_5ebrmpzztz1t2srepel23w5vpczhn4xn"
+    },
+    {
+      "scene_name": "pineapple_004_tzjd6tk3r7n87igu1pz7j0ak1hyr3xi5",
+      "category": "pineapple",
+      "object_instance": "pineapple_004",
+      "relative_path": "oo3d9dsingle/pineapple_004_tzjd6tk3r7n87igu1pz7j0ak1hyr3xi5"
+    },
+    {
+      "scene_name": "pineapple_005_2q3ei5fuf58l2otznpb0p6cax717e8y7",
+      "category": "pineapple",
+      "object_instance": "pineapple_005",
+      "relative_path": "oo3d9dsingle/pineapple_005_2q3ei5fuf58l2otznpb0p6cax717e8y7"
+    },
+    {
+      "scene_name": "pineapple_006_j3npxh1yd3rrp5bpdrq2agghc3uytgvg",
+      "category": "pineapple",
+      "object_instance": "pineapple_006",
+      "relative_path": "oo3d9dsingle/pineapple_006_j3npxh1yd3rrp5bpdrq2agghc3uytgvg"
+    },
+    {
+      "scene_name": "pineapple_007_eh3kiwpddm0c252vhe1ufn80g4n48z8p",
+      "category": "pineapple",
+      "object_instance": "pineapple_007",
+      "relative_path": "oo3d9dsingle/pineapple_007_eh3kiwpddm0c252vhe1ufn80g4n48z8p"
+    },
+    {
+      "scene_name": "pineapple_008_8iwds6r7i4bjm8c15raa18gnjj76rm3u",
+      "category": "pineapple",
+      "object_instance": "pineapple_008",
+      "relative_path": "oo3d9dsingle/pineapple_008_8iwds6r7i4bjm8c15raa18gnjj76rm3u"
+    },
+    {
+      "scene_name": "pineapple_009_sorn9f10z6lzpfa3vy0v34879xy6ml4j",
+      "category": "pineapple",
+      "object_instance": "pineapple_009",
+      "relative_path": "oo3d9dsingle/pineapple_009_sorn9f10z6lzpfa3vy0v34879xy6ml4j"
+    },
+    {
+      "scene_name": "pineapple_010_znoamc41eoda8y38i9x4phinecwojcft",
+      "category": "pineapple",
+      "object_instance": "pineapple_010",
+      "relative_path": "oo3d9dsingle/pineapple_010_znoamc41eoda8y38i9x4phinecwojcft"
+    },
+    {
+      "scene_name": "pineapple_011_jpvt2rq9eha3qigya3owp5lqoqt4be3k",
+      "category": "pineapple",
+      "object_instance": "pineapple_011",
+      "relative_path": "oo3d9dsingle/pineapple_011_jpvt2rq9eha3qigya3owp5lqoqt4be3k"
+    },
+    {
+      "scene_name": "pineapple_012_h9bydwmxx10jykue8lslw5gign00hf6d",
+      "category": "pineapple",
+      "object_instance": "pineapple_012",
+      "relative_path": "oo3d9dsingle/pineapple_012_h9bydwmxx10jykue8lslw5gign00hf6d"
+    },
+    {
+      "scene_name": "pineapple_013_gvufu5zi59sfor1gwo6x9mxjay6id1qe",
+      "category": "pineapple",
+      "object_instance": "pineapple_013",
+      "relative_path": "oo3d9dsingle/pineapple_013_gvufu5zi59sfor1gwo6x9mxjay6id1qe"
+    },
+    {
+      "scene_name": "pineapple_014_n7e0lb0xomttsl18ckd596u3cfys8cy9",
+      "category": "pineapple",
+      "object_instance": "pineapple_014",
+      "relative_path": "oo3d9dsingle/pineapple_014_n7e0lb0xomttsl18ckd596u3cfys8cy9"
+    },
+    {
+      "scene_name": "pineapple_016_hl257nvfeuxvegut90fbacue4235rwni",
+      "category": "pineapple",
+      "object_instance": "pineapple_016",
+      "relative_path": "oo3d9dsingle/pineapple_016_hl257nvfeuxvegut90fbacue4235rwni"
+    },
+    {
+      "scene_name": "pineapple_017_8yhc67voq6josuww38gqrxlhketpnx2b",
+      "category": "pineapple",
+      "object_instance": "pineapple_017",
+      "relative_path": "oo3d9dsingle/pineapple_017_8yhc67voq6josuww38gqrxlhketpnx2b"
+    },
+    {
+      "scene_name": "pineapple_018_f1rwmw6vl7olnpgktkbfa1ig7rtf9d1x",
+      "category": "pineapple",
+      "object_instance": "pineapple_018",
+      "relative_path": "oo3d9dsingle/pineapple_018_f1rwmw6vl7olnpgktkbfa1ig7rtf9d1x"
+    },
+    {
+      "scene_name": "pineapple_019_mifpcqatnv3o3esb1dvauyqusadqsjgc",
+      "category": "pineapple",
+      "object_instance": "pineapple_019",
+      "relative_path": "oo3d9dsingle/pineapple_019_mifpcqatnv3o3esb1dvauyqusadqsjgc"
+    },
+    {
+      "scene_name": "pineapple_020_5nle12w8b5wjpftuc50epk43kutuwjf3",
+      "category": "pineapple",
+      "object_instance": "pineapple_020",
+      "relative_path": "oo3d9dsingle/pineapple_020_5nle12w8b5wjpftuc50epk43kutuwjf3"
+    },
+    {
+      "scene_name": "pineapple_021_i3rd1zifq49e8iezi9uj6vshup8qxzwh",
+      "category": "pineapple",
+      "object_instance": "pineapple_021",
+      "relative_path": "oo3d9dsingle/pineapple_021_i3rd1zifq49e8iezi9uj6vshup8qxzwh"
+    },
+    {
+      "scene_name": "pineapple_022_oyck8kt713jrdw597t0ep5rkgeaz4rrw",
+      "category": "pineapple",
+      "object_instance": "pineapple_022",
+      "relative_path": "oo3d9dsingle/pineapple_022_oyck8kt713jrdw597t0ep5rkgeaz4rrw"
+    },
+    {
+      "scene_name": "pineapple_023_gudk70sspowujlsz1c1y79804k40q3jn",
+      "category": "pineapple",
+      "object_instance": "pineapple_023",
+      "relative_path": "oo3d9dsingle/pineapple_023_gudk70sspowujlsz1c1y79804k40q3jn"
+    },
+    {
+      "scene_name": "pineapple_026_nta9rzij87kpmxkwkw99kjbapwnlk6i2",
+      "category": "pineapple",
+      "object_instance": "pineapple_026",
+      "relative_path": "oo3d9dsingle/pineapple_026_nta9rzij87kpmxkwkw99kjbapwnlk6i2"
+    },
+    {
+      "scene_name": "pineapple_027_kb79mmy4twnjzh10s7zim9n109iz61wb",
+      "category": "pineapple",
+      "object_instance": "pineapple_027",
+      "relative_path": "oo3d9dsingle/pineapple_027_kb79mmy4twnjzh10s7zim9n109iz61wb"
+    },
+    {
+      "scene_name": "pineapple_028_5ka31xmqei2m345ba6fi1hfqcv5c9u61",
+      "category": "pineapple",
+      "object_instance": "pineapple_028",
+      "relative_path": "oo3d9dsingle/pineapple_028_5ka31xmqei2m345ba6fi1hfqcv5c9u61"
+    },
+    {
+      "scene_name": "pineapple_036_9ktx1zmp9vr2yq1yumr3159zttklcxrk",
+      "category": "pineapple",
+      "object_instance": "pineapple_036",
+      "relative_path": "oo3d9dsingle/pineapple_036_9ktx1zmp9vr2yq1yumr3159zttklcxrk"
+    },
+    {
+      "scene_name": "pineapple_045_gtpdfyn3xa645j1n8u772x58ye5f6va7",
+      "category": "pineapple",
+      "object_instance": "pineapple_045",
+      "relative_path": "oo3d9dsingle/pineapple_045_gtpdfyn3xa645j1n8u772x58ye5f6va7"
+    },
+    {
+      "scene_name": "pineapple_047_gtax8x6f6yhk2h0ehm4aonl1enkeghmy",
+      "category": "pineapple",
+      "object_instance": "pineapple_047",
+      "relative_path": "oo3d9dsingle/pineapple_047_gtax8x6f6yhk2h0ehm4aonl1enkeghmy"
+    },
+    {
+      "scene_name": "pineapple_051_kjf9nrjh55ea2n8vpq6qkcsvi0w3qpv7",
+      "category": "pineapple",
+      "object_instance": "pineapple_051",
+      "relative_path": "oo3d9dsingle/pineapple_051_kjf9nrjh55ea2n8vpq6qkcsvi0w3qpv7"
+    },
+    {
+      "scene_name": "teddy_bear_001_ukn0olqtvembvwmulhy7in762yfpf9h9",
+      "category": "teddy_bear",
+      "object_instance": "teddy_bear_001",
+      "relative_path": "oo3d9dsingle/teddy_bear_001_ukn0olqtvembvwmulhy7in762yfpf9h9"
+    },
+    {
+      "scene_name": "teddy_bear_002_hzaeyc1n54m4i13qws17nw1smt1aquoi",
+      "category": "teddy_bear",
+      "object_instance": "teddy_bear_002",
+      "relative_path": "oo3d9dsingle/teddy_bear_002_hzaeyc1n54m4i13qws17nw1smt1aquoi"
+    },
+    {
+      "scene_name": "teddy_bear_003_suf7x55mhquq2mn9gvxqze6ba3a16bjv",
+      "category": "teddy_bear",
+      "object_instance": "teddy_bear_003",
+      "relative_path": "oo3d9dsingle/teddy_bear_003_suf7x55mhquq2mn9gvxqze6ba3a16bjv"
+    },
+    {
+      "scene_name": "teddy_bear_004_6tn1zsgp7dz4xjydgehzxla33xc143bl",
+      "category": "teddy_bear",
+      "object_instance": "teddy_bear_004",
+      "relative_path": "oo3d9dsingle/teddy_bear_004_6tn1zsgp7dz4xjydgehzxla33xc143bl"
+    },
+    {
+      "scene_name": "teddy_bear_005_51ep1m9m16j3tuegw0ot6r84046fqa5x",
+      "category": "teddy_bear",
+      "object_instance": "teddy_bear_005",
+      "relative_path": "oo3d9dsingle/teddy_bear_005_51ep1m9m16j3tuegw0ot6r84046fqa5x"
+    },
+    {
+      "scene_name": "teddy_bear_006_r0k7uwzsk3fkb1b7r70porkbefvp23iv",
+      "category": "teddy_bear",
+      "object_instance": "teddy_bear_006",
+      "relative_path": "oo3d9dsingle/teddy_bear_006_r0k7uwzsk3fkb1b7r70porkbefvp23iv"
+    },
+    {
+      "scene_name": "teddy_bear_007_1y9o9fu88kxfxgu53op34kwmwkchaoid",
+      "category": "teddy_bear",
+      "object_instance": "teddy_bear_007",
+      "relative_path": "oo3d9dsingle/teddy_bear_007_1y9o9fu88kxfxgu53op34kwmwkchaoid"
+    },
+    {
+      "scene_name": "teddy_bear_008_rj7by3a7x9v04bkoq65hp6lxnztlyw26",
+      "category": "teddy_bear",
+      "object_instance": "teddy_bear_008",
+      "relative_path": "oo3d9dsingle/teddy_bear_008_rj7by3a7x9v04bkoq65hp6lxnztlyw26"
+    },
+    {
+      "scene_name": "teddy_bear_009_03qr78r16dlm1py8qq7f3f9urau8d20k",
+      "category": "teddy_bear",
+      "object_instance": "teddy_bear_009",
+      "relative_path": "oo3d9dsingle/teddy_bear_009_03qr78r16dlm1py8qq7f3f9urau8d20k"
+    },
+    {
+      "scene_name": "teddy_bear_010_zcy5tmta2r0almhzt122nf7wvttse46n",
+      "category": "teddy_bear",
+      "object_instance": "teddy_bear_010",
+      "relative_path": "oo3d9dsingle/teddy_bear_010_zcy5tmta2r0almhzt122nf7wvttse46n"
+    },
+    {
+      "scene_name": "toy_truck_001_zpsbq2mvb467n997jvutoe7ivngswbal",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_001",
+      "relative_path": "oo3d9dsingle/toy_truck_001_zpsbq2mvb467n997jvutoe7ivngswbal"
+    },
+    {
+      "scene_name": "toy_truck_002_cfj5cz88mj8hkxxjrx1b5w7lzgv59q19",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_002",
+      "relative_path": "oo3d9dsingle/toy_truck_002_cfj5cz88mj8hkxxjrx1b5w7lzgv59q19"
+    },
+    {
+      "scene_name": "toy_truck_003_vxt3jmuxtdlhkcbmlg7blntep5lwxpg1",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_003",
+      "relative_path": "oo3d9dsingle/toy_truck_003_vxt3jmuxtdlhkcbmlg7blntep5lwxpg1"
+    },
+    {
+      "scene_name": "toy_truck_005_a9a5jqa2g1jcw3qqonjf05iieksyrkkd",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_005",
+      "relative_path": "oo3d9dsingle/toy_truck_005_a9a5jqa2g1jcw3qqonjf05iieksyrkkd"
+    },
+    {
+      "scene_name": "toy_truck_008_a29dji5e1v1t4s9txa4p62ms231i5v22",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_008",
+      "relative_path": "oo3d9dsingle/toy_truck_008_a29dji5e1v1t4s9txa4p62ms231i5v22"
+    },
+    {
+      "scene_name": "toy_truck_009_95kydhjfu7papkn2nyq6yjxe7ooaat60",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_009",
+      "relative_path": "oo3d9dsingle/toy_truck_009_95kydhjfu7papkn2nyq6yjxe7ooaat60"
+    },
+    {
+      "scene_name": "toy_truck_010_jq8gonawqp7lhnl1k1jak10mneqzjme5",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_010",
+      "relative_path": "oo3d9dsingle/toy_truck_010_jq8gonawqp7lhnl1k1jak10mneqzjme5"
+    },
+    {
+      "scene_name": "toy_truck_011_jb6l68phv4xfs46o4oz1fao1kjtahpqd",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_011",
+      "relative_path": "oo3d9dsingle/toy_truck_011_jb6l68phv4xfs46o4oz1fao1kjtahpqd"
+    },
+    {
+      "scene_name": "toy_truck_012_t9rkqi2im7u12hzvfu7yyyzq0tocdda1",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_012",
+      "relative_path": "oo3d9dsingle/toy_truck_012_t9rkqi2im7u12hzvfu7yyyzq0tocdda1"
+    },
+    {
+      "scene_name": "toy_truck_016_kpuxhz5bjie9jvei7jzfuncyapb8x2tj",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_016",
+      "relative_path": "oo3d9dsingle/toy_truck_016_kpuxhz5bjie9jvei7jzfuncyapb8x2tj"
+    },
+    {
+      "scene_name": "toy_truck_021_w1yjtiqgwyobetat036swook6d883e13",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_021",
+      "relative_path": "oo3d9dsingle/toy_truck_021_w1yjtiqgwyobetat036swook6d883e13"
+    },
+    {
+      "scene_name": "toy_truck_024_kuqrxts33xa8abkrtrdvww6u14h8pzgd",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_024",
+      "relative_path": "oo3d9dsingle/toy_truck_024_kuqrxts33xa8abkrtrdvww6u14h8pzgd"
+    },
+    {
+      "scene_name": "toy_truck_026_wdlm63pypqs0sm6g3abeixctirasniij",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_026",
+      "relative_path": "oo3d9dsingle/toy_truck_026_wdlm63pypqs0sm6g3abeixctirasniij"
+    },
+    {
+      "scene_name": "toy_truck_029_a4lu24wpn0bgl5nhg9o5rnpdnqrx6lak",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_029",
+      "relative_path": "oo3d9dsingle/toy_truck_029_a4lu24wpn0bgl5nhg9o5rnpdnqrx6lak"
+    },
+    {
+      "scene_name": "toy_truck_031_nfb7bhy7l8v7obmxtj2tcl22aiqhd5c6",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_031",
+      "relative_path": "oo3d9dsingle/toy_truck_031_nfb7bhy7l8v7obmxtj2tcl22aiqhd5c6"
+    },
+    {
+      "scene_name": "toy_truck_032_ho2m8lsh4hsxtgou1ga9chpb82oikc1n",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_032",
+      "relative_path": "oo3d9dsingle/toy_truck_032_ho2m8lsh4hsxtgou1ga9chpb82oikc1n"
+    },
+    {
+      "scene_name": "toy_truck_034_nvfj05propv6afewjcf8jiyh58v9z5qb",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_034",
+      "relative_path": "oo3d9dsingle/toy_truck_034_nvfj05propv6afewjcf8jiyh58v9z5qb"
+    },
+    {
+      "scene_name": "toy_truck_035_w6fs88lfmqesmosdxxnxhmnch1f0aj6y",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_035",
+      "relative_path": "oo3d9dsingle/toy_truck_035_w6fs88lfmqesmosdxxnxhmnch1f0aj6y"
+    },
+    {
+      "scene_name": "toy_truck_036_qwznj4ecmjtq99kbomt8wu2hxhy1u9nj",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_036",
+      "relative_path": "oo3d9dsingle/toy_truck_036_qwznj4ecmjtq99kbomt8wu2hxhy1u9nj"
+    },
+    {
+      "scene_name": "toy_truck_037_o3nulb77n47jpxu7efuq8w4f98yql3l3",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_037",
+      "relative_path": "oo3d9dsingle/toy_truck_037_o3nulb77n47jpxu7efuq8w4f98yql3l3"
+    },
+    {
+      "scene_name": "toy_truck_041_h3k4aenij6ut6oqewc2lnz77g6hdfdzy",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_041",
+      "relative_path": "oo3d9dsingle/toy_truck_041_h3k4aenij6ut6oqewc2lnz77g6hdfdzy"
+    },
+    {
+      "scene_name": "toy_truck_042_cteyzzp47k9t8hs097juounnoo0via31",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_042",
+      "relative_path": "oo3d9dsingle/toy_truck_042_cteyzzp47k9t8hs097juounnoo0via31"
+    },
+    {
+      "scene_name": "toy_truck_044_s1upodkhf6l52to1nglq6nvkj7rhn79o",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_044",
+      "relative_path": "oo3d9dsingle/toy_truck_044_s1upodkhf6l52to1nglq6nvkj7rhn79o"
+    },
+    {
+      "scene_name": "toy_truck_045_h3u5nn9q5pokgksty1eca5d65vuhdgt6",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_045",
+      "relative_path": "oo3d9dsingle/toy_truck_045_h3u5nn9q5pokgksty1eca5d65vuhdgt6"
+    },
+    {
+      "scene_name": "toy_truck_049_gju5ozua0ata1zhk0tqddia5cm6dm844",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_049",
+      "relative_path": "oo3d9dsingle/toy_truck_049_gju5ozua0ata1zhk0tqddia5cm6dm844"
+    },
+    {
+      "scene_name": "toy_truck_054_c82nm7oijrceygih2anabfqfntbn8u09",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_054",
+      "relative_path": "oo3d9dsingle/toy_truck_054_c82nm7oijrceygih2anabfqfntbn8u09"
+    },
+    {
+      "scene_name": "toy_truck_055_xtrrow6qtha15m503n0ykj5ba6lxzrc8",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_055",
+      "relative_path": "oo3d9dsingle/toy_truck_055_xtrrow6qtha15m503n0ykj5ba6lxzrc8"
+    },
+    {
+      "scene_name": "toy_truck_057_ftlncyftp1ojqwymlv4rdj67pfjfsn4h",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_057",
+      "relative_path": "oo3d9dsingle/toy_truck_057_ftlncyftp1ojqwymlv4rdj67pfjfsn4h"
+    },
+    {
+      "scene_name": "toy_truck_058_v3dyfhcznszwj35in05p42anpz8k8q0f",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_058",
+      "relative_path": "oo3d9dsingle/toy_truck_058_v3dyfhcznszwj35in05p42anpz8k8q0f"
+    },
+    {
+      "scene_name": "toy_truck_059_tan2axbde820q7zx9rrriplj54z7wjke",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_059",
+      "relative_path": "oo3d9dsingle/toy_truck_059_tan2axbde820q7zx9rrriplj54z7wjke"
+    },
+    {
+      "scene_name": "toy_truck_062_bgk13n607p38vsqfjg3uj5kd08sdb2r8",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_062",
+      "relative_path": "oo3d9dsingle/toy_truck_062_bgk13n607p38vsqfjg3uj5kd08sdb2r8"
+    },
+    {
+      "scene_name": "toy_truck_063_uuwr6z3oju6a38z8r5i2udi1yg2qhdkt",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_063",
+      "relative_path": "oo3d9dsingle/toy_truck_063_uuwr6z3oju6a38z8r5i2udi1yg2qhdkt"
+    },
+    {
+      "scene_name": "toy_truck_064_h0hbfodr16exl1p73rcpz17d1x585qyv",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_064",
+      "relative_path": "oo3d9dsingle/toy_truck_064_h0hbfodr16exl1p73rcpz17d1x585qyv"
+    },
+    {
+      "scene_name": "toy_truck_065_qcxtkv72y5eiv1or0oh6b000ujb0hph1",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_065",
+      "relative_path": "oo3d9dsingle/toy_truck_065_qcxtkv72y5eiv1or0oh6b000ujb0hph1"
+    },
+    {
+      "scene_name": "toy_truck_066_qk8kkojid3iukkmeh26oc5m01ml4szti",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_066",
+      "relative_path": "oo3d9dsingle/toy_truck_066_qk8kkojid3iukkmeh26oc5m01ml4szti"
+    },
+    {
+      "scene_name": "toy_truck_067_j9d10sopdc5yx82e8xkc7i79b3ck8e1p",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_067",
+      "relative_path": "oo3d9dsingle/toy_truck_067_j9d10sopdc5yx82e8xkc7i79b3ck8e1p"
+    },
+    {
+      "scene_name": "toy_truck_068_bfcyqs6ibukku3nd9culd56a5e1j05eo",
+      "category": "toy_truck",
+      "object_instance": "toy_truck_068",
+      "relative_path": "oo3d9dsingle/toy_truck_068_bfcyqs6ibukku3nd9culd56a5e1j05eo"
+    }
+  ]
+}

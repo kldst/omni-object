@@ -75,6 +75,22 @@ class OO9DSingleCameraPose(OO9DCameraPoseBase):
             return self.split_root / "test_same_category_unseen_object.json"
         return self.split_root / f"{dset}.json"
 
+    def _object_id_from_split_item(self, item: Dict[str, Any]) -> int:
+        if "object_id" in item:
+            return int(item["object_id"])
+
+        object_instance = item.get("object_instance")
+        if object_instance is None:
+            scene_name = str(item["scene_name"])
+            object_instance = "_".join(scene_name.split("_")[:-1])
+
+        object_id = self.name_to_oid.get(str(object_instance))
+        if object_id is None:
+            raise KeyError(
+                f"Could not resolve object_id for split item with object_instance={object_instance!r}"
+            )
+        return int(object_id)
+
     def _build_single_records_by_object_id(self) -> Dict[int, List[Dict[str, Any]]]:
         if not self.single_split_json.is_file():
             raise FileNotFoundError(f"OO9D single split JSON not found: {self.single_split_json}")
@@ -86,7 +102,7 @@ class OO9DSingleCameraPose(OO9DCameraPoseBase):
         image_ids = [int(x) for x in (self.fixed_object_view_ids or self.DEFAULT_OBJECT_VIEW_IDS)]
 
         for item in payload.get("scenes", []):
-            object_id = int(item["object_id"])
+            object_id = self._object_id_from_split_item(item)
             object_dir = self.object_image_root / f"obj_{object_id:06d}"
             rgb_dir = object_dir / "rgb"
             image_paths = [rgb_dir / f"{image_id:06d}.png" for image_id in image_ids]
@@ -146,7 +162,7 @@ class OO9DSingleCameraPose(OO9DCameraPoseBase):
             scene_name = str(item["scene_name"])
             if self.only_scene_name and scene_name != self.only_scene_name:
                 continue
-            object_id = int(item["object_id"])
+            object_id = self._object_id_from_split_item(item)
             if self.only_object_id is not None and object_id != self.only_object_id:
                 continue
             if object_id not in self.single_records_by_object_id:
