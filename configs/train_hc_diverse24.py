@@ -149,7 +149,7 @@ resolution = (518, 476)
 # DIVERSE_24_SCHEDULE for the full geometry.
 fixed_object_view_ids = (0, 5, 8, 19)
 strict_fixed_object_view_ids = True
-# val_max_records_per_dataset = 1000
+val_max_records_per_dataset = 1000
 
 # Validation mode: "loss" = current loss/rot_err val over val_dataset;
 # "benchmark" = run the official HouseCat6D mAP benchmark in-process and log to wandb.
