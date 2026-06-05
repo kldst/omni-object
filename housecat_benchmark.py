@@ -50,10 +50,17 @@ def evaluate_and_collect(
 ) -> Dict[str, float]:
     """Run VI-Net's compute_independent_mAP over the written pkls and return the
     overall (mean-over-classes) headline metrics as a flat dict."""
-    for p in (str(HOUSECAT_VINET), str(HOUSECAT_VINET / "utils"), str(HOUSECAT_VINET / "lib")):
-        if p not in sys.path:
-            sys.path.insert(0, p)
-    from utils.evaluation_utils import compute_independent_mAP  # type: ignore
+    # Prefer the vendored copy that ships inside this repo (housecat_eval_utils.py),
+    # so the benchmark works on a deployment where only omni-object_clone is pushed
+    # (the external HouseCat6D/VI-Net checkout is absent there). Fall back to VI-Net's
+    # utils.evaluation_utils when running from the full local tree.
+    try:
+        from housecat_eval_utils import compute_independent_mAP  # type: ignore
+    except ImportError:
+        for p in (str(HOUSECAT_VINET), str(HOUSECAT_VINET / "utils"), str(HOUSECAT_VINET / "lib")):
+            if p not in sys.path:
+                sys.path.insert(0, p)
+        from utils.evaluation_utils import compute_independent_mAP  # type: ignore
 
     pkl_list: List[str] = []
     for scene in scenes:
