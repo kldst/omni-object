@@ -239,7 +239,7 @@ def main(argv=None) -> None:
             pickle.dump({**lists, "meta": run_meta}, fh, protocol=pickle.HIGHEST_PROTOCOL)
         tmp.replace(path)  # atomic, so a kill mid-write never corrupts the pkl
 
-    gt_aff, gt_sz, gt_sym, gt_cls, pr_aff, pr_sz = [], [], [], [], [], []
+    gt_aff, gt_sz, gt_sym, gt_cls, pr_aff, pr_sz, oids = [], [], [], [], [], [], []
     # Resume: reload partial predictions and skip the records already done (records
     # are processed in order, so the first len(done) of this shard's slice are done).
     if args.resume and args.save_predictions is not None and Path(args.save_predictions).is_file():
@@ -247,6 +247,7 @@ def main(argv=None) -> None:
             d = pickle.load(fh)
         gt_aff, gt_sz, gt_sym = d["gt_aff"], d["gt_sz"], d["gt_sym"]
         gt_cls, pr_aff, pr_sz = d["gt_cls"], d["pr_aff"], d["pr_sz"]
+        oids = d.get("oid", [])
         done = len(gt_aff)
         dataset.records = dataset.records[done:]
         dataset.scenes = dataset.records
@@ -257,7 +258,7 @@ def main(argv=None) -> None:
 
     def _lists():
         return {"gt_aff": gt_aff, "gt_sz": gt_sz, "gt_sym": gt_sym,
-                "gt_cls": gt_cls, "pr_aff": pr_aff, "pr_sz": pr_sz}
+                "gt_cls": gt_cls, "pr_aff": pr_aff, "pr_sz": pr_sz, "oid": oids}
 
     seen, t0, nb = 0, time.time(), 0
     if args.save_predictions is not None:
@@ -297,6 +298,7 @@ def main(argv=None) -> None:
             gt_sz.append(gt_size); pr_sz.append(np.asarray(pred_size_b[i], dtype=np.float64).reshape(3))
             gt_cls.append(int(np.asarray(_batch_item(batch["class_id"], i)).reshape(-1)[0]))
             gt_sym.append(resolve_sym(oid, cname))
+            oids.append(oid)
             seen += 1
         nb += 1
         pbar.set_postfix(samples=len(gt_aff))

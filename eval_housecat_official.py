@@ -299,11 +299,67 @@ def write_scene_pkls(
 # ============================================================================
 # Official evaluator entry.
 # ============================================================================
-def run_evaluation(out_dir: Path) -> None:
+def _patch_box_y_180_symmetry() -> None:
+    """Monkey-patch the official compute_RT_degree_cm_symmetry to ALSO treat
+    'box' as 180-deg y-axis discrete-symmetric (same as phone/eggbox/glue).
+    Boxes in HouseCat6D often look 180-symmetric in appearance (label both
+    sides), so this lets us see how much of the 0% box pose mAP is purely
+    due to the strict no-symmetry rule.
+    """
+    import utils.evaluation_utils as eu  # type: ignore
+    orig = eu.compute_RT_degree_cm_symmetry
+
+    import numpy as _np
+    import math as _math
+
+    def patched(RT_1, RT_2, class_id, handle_visibility, synset_names):
+        if RT_1 is None or RT_2 is None:
+            return -1
+        try:
+            assert _np.array_equal(RT_1[3, :], RT_2[3, :])
+            assert _np.array_equal(RT_1[3, :], _np.array([0, 0, 0, 1]))
+        except AssertionError:
+            print(RT_1[3, :], RT_2[3, :]); exit()
+
+        R1 = RT_1[:3, :3] / _np.cbrt(_np.linalg.det(RT_1[:3, :3]))
+        T1 = RT_1[:3, 3]
+        R2 = RT_2[:3, :3] / _np.cbrt(_np.linalg.det(RT_2[:3, :3]))
+        T2 = RT_2[:3, 3]
+
+        name = synset_names[class_id]
+        if name in ['bottle', 'can', 'bowl', 'glass']:
+            y = _np.array([0, 1, 0]); y1 = R1 @ y; y2 = R2 @ y
+            theta = _np.arccos(y1.dot(y2) / (_np.linalg.norm(y1) * _np.linalg.norm(y2)))
+        elif name == 'mug' and handle_visibility == 0:
+            y = _np.array([0, 1, 0]); y1 = R1 @ y; y2 = R2 @ y
+            theta = _np.arccos(y1.dot(y2) / (_np.linalg.norm(y1) * _np.linalg.norm(y2)))
+        # ↓ MODIFIED: include 'box' in the 180-deg y-axis discrete-symmetric set
+        elif name in ['phone', 'eggbox', 'glue', 'box']:
+            y_180_RT = _np.diag([-1.0, 1.0, -1.0])
+            R = R1 @ R2.transpose()
+            R_rot = R1 @ y_180_RT @ R2.transpose()
+            theta = min(_np.arccos((_np.trace(R) - 1) / 2),
+                        _np.arccos((_np.trace(R_rot) - 1) / 2))
+        else:
+            R = R1 @ R2.transpose()
+            theta = _np.arccos(_np.clip((_np.trace(R) - 1) / 2, -1.0, 1.0))
+
+        theta *= 180 / _np.pi
+        shift = _np.linalg.norm(T1 - T2) * 100
+        return _np.array([theta, shift])
+
+    eu.compute_RT_degree_cm_symmetry = patched
+    print("[run_evaluation] PATCHED: box class is now treated as 180° y-axis symmetric.")
+
+
+def run_evaluation(out_dir: Path, box_y_180_symmetry: bool = False) -> None:
     sys.path.insert(0, str(HOUSECAT_VINET))
     sys.path.insert(0, str(HOUSECAT_VINET / "utils"))
     sys.path.insert(0, str(HOUSECAT_VINET / "lib"))
     from utils.evaluation_utils import evaluate_housecat  # type: ignore
+
+    if box_y_180_symmetry:
+        _patch_box_y_180_symmetry()
 
     import logging
     logger = logging.getLogger("housecat_eval")
@@ -335,6 +391,10 @@ def parse_args(argv=None) -> argparse.Namespace:
                    help="Override fixed_object_view_ids (e.g. 0 5 8 19 for diverse24)")
     p.add_argument("--frame-stride", type=int, default=1,
                    help="Subsample test frames: keep only frames where image_id %% stride == 0.")
+    p.add_argument("--box-y-180-symmetry", action="store_true",
+                   help="During the official evaluator step, treat 'box' as 180-deg y-axis "
+                        "symmetric (in addition to the official phone/eggbox/glue rule). "
+                        "Useful to test how much box failure is due to 180-flip ambiguity.")
     p.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     p.add_argument("--scenes", nargs="+", default=list(TEST_SCENES))
     p.add_argument("--batch-size", type=int, default=8)
@@ -384,6 +444,9 @@ def orchestrate(args: argparse.Namespace, gpu_ids: List[str]) -> None:
             cmd.extend(["--view-ids", *(str(v) for v in args.view_ids)])
         if getattr(args, "frame_stride", 1) and int(args.frame_stride) > 1:
             cmd.extend(["--frame-stride", str(int(args.frame_stride))])
+        # box_y_180_symmetry only matters at the final evaluator step, not in shards,
+        # so it's NOT forwarded to subprocesses; it's read by the orchestrator's
+        # run_evaluation() call after all shards finish.
         log_path = args.output_dir / f"shard_{j:02d}.log"
         log_paths.append(log_path)
         log_fh = open(log_path, "w", encoding="utf-8")
@@ -414,7 +477,7 @@ def orchestrate(args: argparse.Namespace, gpu_ids: List[str]) -> None:
     rc = [p.wait() for p in procs]
     if any(r != 0 for r in rc):
         print(f"[orchestrator] non-zero return codes: {rc}")
-    run_evaluation(args.output_dir)
+    run_evaluation(args.output_dir, box_y_180_symmetry=bool(getattr(args, "box_y_180_symmetry", False)))
 
 
 def run_worker(args: argparse.Namespace) -> None:
@@ -453,7 +516,7 @@ def main(argv=None) -> None:
     args = parse_args(argv)
 
     if args.eval_only:
-        run_evaluation(args.output_dir)
+        run_evaluation(args.output_dir, box_y_180_symmetry=bool(getattr(args, "box_y_180_symmetry", False)))
         return
 
     if args.gpus and "," in args.gpus and args.shard_scenes is None:
@@ -468,7 +531,7 @@ def main(argv=None) -> None:
     run_worker(args)
     # Single-process path also runs the evaluator at the end.
     if args.shard_scenes is None:
-        run_evaluation(args.output_dir)
+        run_evaluation(args.output_dir, box_y_180_symmetry=bool(getattr(args, "box_y_180_symmetry", False)))
 
 
 if __name__ == "__main__":

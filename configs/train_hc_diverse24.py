@@ -14,7 +14,7 @@
 #   5. Smaller dataset → faster epoch, so checkpointing_steps reduced to 1000.
 
 output_dir = "outputs"
-exp_name = "hc_only_diverse24_warmstart_14k_0530"
+exp_name = "hc_only_diverse24_warmstart_14k_0530_regular_cache"
 logging_dir = "logs"
 
 wandb = True
@@ -22,7 +22,7 @@ tensorboard = False
 report_to = "tensorboard"
 num_save_log = 1
 num_save_visual = 100000
-checkpointing_steps = 1000  # smaller dataset -> save more often
+checkpointing_steps = 688  # smaller dataset -> save more often
 
 # Model
 # model_url = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/outputs/0521/14000/model.safetensors"
@@ -47,6 +47,12 @@ object_prototype_layer_indices = (4, 11, 17, 23)
 object_prototype_num_tokens = 32
 object_prototype_object_encoder_no_grad = True
 object_cross_attn_heads = 16
+# Object-encoder token cache: reuse the frozen reference-image ViT tokens across
+# batches/epochs (keyed by object id). Requires object_prototype_object_encoder_no_grad
+# (above) + frozen object encoder + deterministic refs (object_ref_color_jitter off,
+# set in the dataset string below). The trainable poolers still run live.
+object_encode_cache = True
+object_encode_cache_max = 256
 object_pose_context_pool = "flatten"
 object_pose_use_global_scene_object_concat = False
 object_pose_transformer_depth = 6
@@ -124,11 +130,18 @@ object_srt_weight_size = 1.0
 # object_srt_symmetry_info_path = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/mixed_symmetry_info.json"
 object_srt_symmetry_info_path = "/omni-object_clone_real/mixed_symmetry_info.json"
 object_srt_symmetry_continuous_steps = 72
+# SMOC-Net style cross-view relative-pose regularization (requires paired sampling
+# in the dataset, see relative_pose_pairing=True below). Symmetry-aware; reuses the
+# object_srt symmetry table. Keep the weight small -- this is a regularizer.
+relative_pose_loss_weight = 0.1
+relative_pose_weight_rot = 1.0
+relative_pose_weight_trans = 0.0   # translation consistency off by default
+relative_pose_loss_type = "l1"
 
 # Dataset
 train_batch_images = 60
-val_batch_images = 60
-val_epoch_freq = 5      # eval more often since training data is smaller
+# val_batch_images = 60
+val_epoch_freq = 1      # eval more often since training data is smaller
 num_workers = 0
 resolution = (518, 476)
 # diverse24 view selection: 0 = near top-down, 5 = front (az 0°/el +20°),
@@ -136,7 +149,15 @@ resolution = (518, 476)
 # DIVERSE_24_SCHEDULE for the full geometry.
 fixed_object_view_ids = (0, 5, 8, 19)
 strict_fixed_object_view_ids = True
-val_max_records_per_dataset = 1000
+# val_max_records_per_dataset = 1000
+
+# Validation mode: "loss" = current loss/rot_err val over val_dataset;
+# "benchmark" = run the official HouseCat6D mAP benchmark in-process and log to wandb.
+validation_mode = "benchmark"
+benchmark_scenes = ["test_scene1", "test_scene2", "test_scene3", "test_scene4", "test_scene5"]
+benchmark_frame_stride = 1       # subsample frames per scene to bound eval time
+benchmark_batch_size = 60
+benchmark_limit = None           # cap samples/scene for smoke tests (None = full)
 
 # freepose_root = "/mnt/train-data-4-hdd/yian/freepose"
 # omni_root = f"{freepose_root}/omni-object_clone"
@@ -171,6 +192,11 @@ train_dataset = (
     f"resolution={resolution}, "
     "transform=ColorJitter, "
     "scene_glob='scene*', "  # train scenes: scene01..scene34
+    # Pair consecutive batch items (2k, 2k+1) as two views of the same static
+    # object instance, for the SMOC-Net relative-pose loss. Requires even
+    # train_batch_images. pair_min_frame_gap avoids near-identical views.
+    "relative_pose_pairing=True, "
+    "pair_min_frame_gap=20, "
     "seed=42)"
 )
 

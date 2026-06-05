@@ -1,3 +1,6 @@
+from collections import OrderedDict
+from contextlib import nullcontext
+
 import torch
 import torch.nn as nn
 from huggingface_hub import PyTorchModelHubMixin  # used for model hub
@@ -98,8 +101,20 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
                  object_prototype_layer_indices=(4, 11, 17, 23),
                  object_prototype_num_tokens=4,
                  object_prototype_object_encoder_no_grad=False,
-                 object_cross_attn_heads=16):
+                 object_cross_attn_heads=16,
+                 object_encode_cache=False,
+                 object_encode_cache_max=256):
         super().__init__()
+        # Object-encoder token cache: the reference-image ViT forward is the most
+        # expensive part of object encoding and only depends on the (frozen) shared
+        # encoder, so its per-layer tokens can be cached and reused across batches
+        # and epochs. Keyed by object id. Requires object_prototype_object_encoder_no_grad
+        # and a frozen object encoder, and deterministic reference images
+        # (object_ref_color_jitter=False). The trainable prototype poolers still run
+        # live on the cached tokens, so their gradients are unaffected.
+        self.object_encode_cache = bool(object_encode_cache)
+        self.object_encode_cache_max = int(object_encode_cache_max)
+        self._object_token_cache = OrderedDict()
 
         self.aggregator = ZeroAggregator(img_size=img_size, patch_size=patch_size, embed_dim=embed_dim, 
                                          pose_hidden_dim = 9, cam_drop_prob=cam_drop_prob, depth_drop_prob=depth_drop_prob,
@@ -193,25 +208,14 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
             raise ValueError("Object patch tokens are empty; cannot build object prototypes")
         return self.object_prototype_poolers[str(layer_idx)](object_patch_tokens)
 
-    def _encode_object_prototypes(self, object_images: torch.Tensor):
+    def _compute_object_layer_tokens(self, object_images: torch.Tensor, requested_layers):
+        """Run the (frozen) shared encoder over reference images and return
+        ``(patch_start_idx, {layer_idx: tokens (B, S_obj, P, C)})``. This is the
+        expensive part that the cache stores."""
         B, S_obj, _, H_obj, W_obj = object_images.shape
         object_patch_tokens = self.aggregator.embed_images(object_images)
-
-        selected_layers = self._resolve_object_prototype_layer_indices(self.aggregator.depth)
-        requested_layers = tuple(dict.fromkeys((*selected_layers, self.aggregator.depth - 1)))
-        if self.object_prototype_object_encoder_no_grad:
-            with torch.no_grad():
-                _, object_patch_start_idx, object_layer_tokens = self.aggregator.forward_from_patch_tokens(
-                    object_patch_tokens,
-                    batch_size=B,
-                    seq_len=S_obj,
-                    height=H_obj,
-                    width=W_obj,
-                    return_layer_tokens=True,
-                    layer_token_indices=requested_layers,
-                    collect_output_list=False,
-                )
-        else:
+        ctx = torch.no_grad() if self.object_prototype_object_encoder_no_grad else nullcontext()
+        with ctx:
             _, object_patch_start_idx, object_layer_tokens = self.aggregator.forward_from_patch_tokens(
                 object_patch_tokens,
                 batch_size=B,
@@ -222,6 +226,68 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
                 layer_token_indices=requested_layers,
                 collect_output_list=False,
             )
+        return object_patch_start_idx, object_layer_tokens
+
+    def _cache_put(self, key, entry):
+        cache = self._object_token_cache
+        if key in cache:
+            cache.move_to_end(key)
+            return
+        cache[key] = entry
+        while len(cache) > self.object_encode_cache_max:
+            cache.popitem(last=False)  # evict least-recently-used
+
+    def clear_object_cache(self):
+        self._object_token_cache.clear()
+
+    def _gather_object_layer_tokens_cached(self, object_images, keys, requested_layers):
+        """Return per-batch-row layer tokens, encoding only object ids missing
+        from the cache (deduplicated within the batch)."""
+        cache = self._object_token_cache
+        missing_unique = OrderedDict()
+        for i, key in enumerate(keys):
+            if key not in cache and key not in missing_unique:
+                missing_unique[key] = i
+        if missing_unique:
+            rows = list(missing_unique.values())
+            sub_images = object_images[rows]
+            patch_start_idx, sub_layer_tokens = self._compute_object_layer_tokens(sub_images, requested_layers)
+            for pos, key in enumerate(missing_unique.keys()):
+                self._cache_put(
+                    key,
+                    {
+                        "patch_start_idx": int(patch_start_idx),
+                        "layers": {L: sub_layer_tokens[L][pos].detach() for L in requested_layers},
+                    },
+                )
+        for key in keys:
+            cache.move_to_end(key)
+
+        patch_start_idx = cache[keys[0]]["patch_start_idx"]
+        layer_tokens = {
+            L: torch.stack([cache[k]["layers"][L].to(object_images.device) for k in keys], dim=0)
+            for L in requested_layers
+        }
+        return patch_start_idx, layer_tokens
+
+    def _encode_object_prototypes(self, object_images: torch.Tensor, object_ids=None):
+        selected_layers = self._resolve_object_prototype_layer_indices(self.aggregator.depth)
+        requested_layers = tuple(dict.fromkeys((*selected_layers, self.aggregator.depth - 1)))
+
+        use_cache = (
+            self.object_encode_cache
+            and self.object_prototype_object_encoder_no_grad
+            and object_ids is not None
+        )
+        if use_cache:
+            keys = self._object_ids_to_keys(object_ids)
+            object_patch_start_idx, object_layer_tokens = self._gather_object_layer_tokens_cached(
+                object_images, keys, requested_layers
+            )
+        else:
+            object_patch_start_idx, object_layer_tokens = self._compute_object_layer_tokens(
+                object_images, requested_layers
+            )
 
         prototypes_by_idx = {
             layer_idx: self._build_object_prototypes(object_layer_tokens[layer_idx], object_patch_start_idx, layer_idx)
@@ -229,6 +295,14 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
         }
         final_object_tokens = object_layer_tokens[self.aggregator.depth - 1][:, :, object_patch_start_idx:, :]
         return prototypes_by_idx, final_object_tokens
+
+    @staticmethod
+    def _object_ids_to_keys(object_ids):
+        if object_ids is None:
+            return None
+        if torch.is_tensor(object_ids):
+            return [str(int(x)) for x in object_ids.reshape(-1).tolist()]
+        return [str(int(x)) if not isinstance(x, str) else x for x in object_ids]
 
     def _apply_progressive_object_prototype_cross_attention(
         self,
@@ -271,6 +345,7 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
         intrinsics: torch.Tensor = None,
         depth: torch.Tensor = None,
         mask: torch.Tensor = None,
+        object_ids=None,
     ):
         images = self._ensure_batched_images(images)
         object_images = self._ensure_batched_images(object_images)
@@ -281,7 +356,7 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
             self.enable_multi_layer_object_prototype_cross_attn or self.object_srt_head is not None
         )
         if need_object_encoder:
-            object_prototypes_by_idx, object_patch_tokens = self._encode_object_prototypes(object_images)
+            object_prototypes_by_idx, object_patch_tokens = self._encode_object_prototypes(object_images, object_ids)
 
         if self.enable_multi_layer_object_prototype_cross_attn and object_prototypes_by_idx is not None:
             def progressive_object_fusion(layer_idx, scene_layer_tokens, scene_patch_start_idx):
@@ -367,6 +442,7 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
         mask: torch.Tensor = None,
         depth_gt_index: list = None,
         camera_gt_index: list = None,
+        object_ids=None,
     ):
         images = self._ensure_batched_images(images)
         object_images = self._ensure_batched_images(object_images)
@@ -377,7 +453,7 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
             self.enable_multi_layer_object_prototype_cross_attn or self.object_srt_head is not None
         )
         if need_object_encoder:
-            object_prototypes_by_idx, object_patch_tokens = self._encode_object_prototypes(object_images)
+            object_prototypes_by_idx, object_patch_tokens = self._encode_object_prototypes(object_images, object_ids)
 
         if self.enable_multi_layer_object_prototype_cross_attn and object_prototypes_by_idx is not None:
             def progressive_object_fusion(layer_idx, scene_layer_tokens, scene_patch_start_idx):

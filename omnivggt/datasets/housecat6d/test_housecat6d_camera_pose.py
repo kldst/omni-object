@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import torch
 from PIL import Image, ImageDraw
 
 
@@ -212,6 +213,290 @@ def save_pose_overlay(sample: dict[str, Any], save_dir: Path, idx: int, axis_len
     return overlay_path
 
 
+def _relative_angle_deg(rot_a: np.ndarray, rot_b: np.ndarray) -> float:
+    rel = rot_a.T @ rot_b
+    cos = (np.trace(rel) - 1.0) / 2.0
+    cos = float(np.clip(cos, -1.0, 1.0))
+    return float(np.degrees(np.arccos(cos)))
+
+
+def run_relative_pose_test(args) -> None:
+    """Verify the paired sampler and the relative-pose loss numerically.
+
+    Checks:
+      1. rot6d <-> matrix round trip.
+      2. Paired sampler yields adjacent (same object, different frame) pairs.
+      3. GT-as-prediction -> loss_rel_rot ~= 0; perturbed -> loss > 0.
+      4. Right-multiplying a symmetric object's prediction by a symmetry -> loss ~= 0.
+    """
+    import torch
+
+    from omnivggt.datasets.housecat6d import HouseCat6DCameraPose
+    from omnivggt.datasets.base.batched_sampler import PairedObjectBatchSampler
+    from omnivggt.loss import (
+        _rot6d_to_matrix,
+        _rotation_matrix_to_rot6d,
+        _load_symmetry_info,
+        compute_object_relative_pose_loss,
+    )
+
+    print("=" * 90)
+    print("[1] rot6d <-> matrix round trip")
+    torch.manual_seed(0)
+    q = torch.randn(5, 4)
+    q = q / q.norm(dim=-1, keepdim=True)
+    # build random rotations via Gram-Schmidt on random 3x3
+    rand = torch.randn(5, 3, 3)
+    u, _, v = torch.linalg.svd(rand)
+    R = u @ v
+    det = torch.linalg.det(R)
+    R[det < 0, :, 2] *= -1
+    rt = _rot6d_to_matrix(_rotation_matrix_to_rot6d(R))
+    err = (rt - R).abs().max().item()
+    print(f"    max |rot6d_to_matrix(rot6d(R)) - R| = {err:.3e}  ->  {'OK' if err < 1e-5 else 'FAIL'}")
+
+    print("=" * 90)
+    print("[2] paired sampler adjacency")
+    dataset = HouseCat6DCameraPose(
+        dataset_location=args.dataset_root,
+        object_image_root=args.object_image_root,
+        align_json=args.align_json,
+        dset=args.dset,
+        resolution=tuple(args.resolution),
+        seed=args.seed,
+        only_scene_name=args.only_scene_name,
+        scene_glob=args.scene_glob,
+        object_presence_prob=1.0,  # avoid absent-object injection during the test
+        relative_pose_pairing=True,
+        pair_min_frame_gap=args.pair_min_frame_gap,
+        max_records=args.max_records,
+    )
+    groups, group_image_ids = dataset.build_pair_groups()
+    print(f"    eligible (scene,object) groups (>=2 frames): {len(groups)}")
+    sampler = PairedObjectBatchSampler(
+        dataset, batch_size=args.batch_size, pool_size=1, groups=groups,
+        group_image_ids=group_image_ids, min_frame_gap=args.pair_min_frame_gap,
+    )
+    sampler.set_epoch(0)
+    flat = list(sampler)[: args.batch_size]
+    rec_indices = [int(idx) for idx, _ in flat]
+    bad = 0
+    for k in range(0, len(rec_indices), 2):
+        ri, rj = rec_indices[k], rec_indices[k + 1]
+        rec_i, rec_j = dataset.records[ri], dataset.records[rj]
+        same_obj = (rec_i["scene_name"], rec_i["object_name"]) == (rec_j["scene_name"], rec_j["object_name"])
+        diff_frame = rec_i["image_id"] != rec_j["image_id"]
+        if not (same_obj and diff_frame):
+            bad += 1
+        if k < 6:
+            print(f"    pair {k//2}: {rec_i['scene_name']}/{rec_i['object_name']} "
+                  f"frames=({rec_i['image_id']},{rec_j['image_id']}) "
+                  f"same_obj={same_obj} diff_frame={diff_frame}")
+    print(f"    invalid pairs in first batch: {bad}/{args.batch_size // 2}  ->  {'OK' if bad == 0 else 'FAIL'}")
+
+    print("=" * 90)
+    print("[3] relative-pose loss with GT-as-prediction and perturbation")
+    # Build a small paired batch (2 pairs = 4 samples) from real data.
+    sample_indices = rec_indices[:4]
+    samples = [dataset[i] for i in sample_indices]
+    gt_rot = torch.stack([torch.from_numpy(np.asarray(s["object_rotation"], dtype=np.float32)) for s in samples])
+    object_id = torch.tensor([int(s["object_id"]) for s in samples], dtype=torch.long)
+    has_object = torch.tensor([bool(s["has_object"]) for s in samples], dtype=torch.bool)
+    dataset_labels = [str(s["dataset"]) for s in samples]
+    scene_names = [str(s["scene_name"]) for s in samples]
+    gt_trans_norm = torch.stack([torch.from_numpy(np.asarray(s["object_translation"], dtype=np.float32)) for s in samples])
+    gt_trans_metric = torch.stack([torch.from_numpy(np.asarray(s["object_translation_metric"], dtype=np.float32)) for s in samples])
+    gt_scale = torch.tensor([float(np.asarray(s["object_translation_scale"])) for s in samples], dtype=torch.float32)
+
+    batch = {
+        "object_rotation": gt_rot,
+        "object_id": object_id,
+        "has_object": has_object,
+        "dataset": dataset_labels,
+        "scene_name": scene_names,
+        "object_translation": gt_trans_norm,
+        "object_translation_metric": gt_trans_metric,
+        "object_translation_scale": gt_scale,
+    }
+    print(f"    pair0 GT relative angle (cam motion): {_relative_angle_deg(gt_rot[0].numpy(), gt_rot[1].numpy()):.2f} deg")
+    print(f"    pair1 GT relative angle (cam motion): {_relative_angle_deg(gt_rot[2].numpy(), gt_rot[3].numpy()):.2f} deg")
+
+    sym_path = args.symmetry_info_path
+    common = dict(weight_rot=1.0, weight_trans=1.0, loss_type="l1",
+                  symmetry_info_path=sym_path, symmetry_continuous_steps=72)
+
+    # GT as prediction -> loss ~ 0
+    pred_gt = {"object_pose": _rotation_matrix_to_rot6d(gt_rot).clone(),
+               "object_translation": gt_trans_norm.clone()}
+    out_gt = compute_object_relative_pose_loss(pred_gt, batch, **common)
+    # The residual ~1.4e-3 rad (0.08 deg) is the arccos clamp floor (sqrt(2*eps)),
+    # not a real error -- treat anything < 0.5 deg as zero.
+    gt_deg = np.degrees(out_gt['loss_rel_rot'].item())
+    print(f"    GT-pred: loss_rel_rot={gt_deg:.3f} deg "
+          f"loss_rel_trans={out_gt['loss_rel_trans'].item():.3e}  "
+          f"->  {'OK' if gt_deg < 0.5 else 'FAIL'}")
+
+    # Perturb only view 0 by a 20-deg rotation about z -> relative rotation breaks
+    ang = np.radians(20.0)
+    Rz = torch.tensor([[np.cos(ang), -np.sin(ang), 0.0],
+                       [np.sin(ang), np.cos(ang), 0.0],
+                       [0.0, 0.0, 1.0]], dtype=torch.float32)
+    perturbed = gt_rot.clone()
+    perturbed[0] = Rz @ perturbed[0]
+    pred_bad = {"object_pose": _rotation_matrix_to_rot6d(perturbed).clone(),
+                "object_translation": gt_trans_norm.clone()}
+    out_bad = compute_object_relative_pose_loss(pred_bad, batch, **common)
+    print(f"    perturbed-pred(+20deg on view0): loss_rel_rot={np.degrees(out_bad['loss_rel_rot'].item()):.2f} deg  "
+          f"->  {'OK' if out_bad['loss_rel_rot'].item() > 0.1 else 'FAIL'}")
+
+    print("=" * 90)
+    print("[4] symmetry invariance of the relative-pose loss")
+    sym_info = _load_symmetry_info(str(sym_path), 72) if sym_path else {}
+    # find a pair whose object is symmetric (more than identity)
+    sym_pair = None
+    for k in range(0, 4, 2):
+        key = f"{dataset_labels[k]}:{int(object_id[k])}"
+        sym = sym_info.get(key)
+        if sym is not None and sym.shape[0] > 1:
+            sym_pair = (k, sym)
+            break
+    if sym_pair is None:
+        print("    no symmetric object in the sampled pairs; skipping (not a failure).")
+    else:
+        k, sym = sym_pair
+        S = sym[1]  # a non-identity symmetry rotation
+        pred_sym_rot = gt_rot.clone()
+        # right-multiply both views by (possibly different) symmetries
+        pred_sym_rot[k] = gt_rot[k] @ S
+        pred_sym_rot[k + 1] = gt_rot[k + 1] @ sym[min(2, sym.shape[0] - 1)]
+        pred_sym = {"object_pose": _rotation_matrix_to_rot6d(pred_sym_rot).clone(),
+                    "object_translation": gt_trans_norm.clone()}
+        # isolate this pair by zeroing has_object on the other pair
+        batch_one = dict(batch)
+        ho = has_object.clone()
+        for m in range(4):
+            if m not in (k, k + 1):
+                ho[m] = False
+        batch_one["has_object"] = ho
+        out_sym = compute_object_relative_pose_loss(pred_sym, batch_one, **common)
+        print(f"    object_id={int(object_id[k])} sym candidates={sym.shape[0]}")
+        print(f"    sym-perturbed pred (both views shifted by a symmetry): "
+              f"loss_rel_rot={np.degrees(out_sym['loss_rel_rot'].item()):.3f} deg  "
+              f"->  {'OK (symmetry absorbed)' if out_sym['loss_rel_rot'].item() < 1e-2 else 'FAIL'}")
+    print("=" * 90)
+    print("relative-pose test done.")
+
+
+def _decollate_item(batch: dict[str, Any], i: int, batch_size: int) -> dict[str, Any]:
+    """Pull sample ``i`` out of a collated batch, restoring the per-sample dict
+    layout that ``HouseCat6DCameraPose.__getitem__`` produces.
+
+    Handles default_collate quirks: str fields become a length-B list (index ``i``),
+    while nested lists like ``object_rgb_paths`` become a transposed list of
+    per-view tuples (gather ``[view[i] for view in value]``).
+    """
+    out: dict[str, Any] = {}
+    for key, value in batch.items():
+        if torch.is_tensor(value):
+            out[key] = value[i]
+        elif isinstance(value, (list, tuple)):
+            if len(value) > 0 and isinstance(value[0], (list, tuple)):
+                out[key] = [col[i] for col in value]          # transposed nested list
+            elif len(value) == batch_size:
+                out[key] = value[i]                            # per-sample list (e.g. str)
+            else:
+                out[key] = value
+        else:
+            out[key] = value
+    return out
+
+
+def run_dump_batch(args) -> None:
+    """Pull ONE batch through the real DataLoader (same sampler + collate as
+    training) and dump, per item: the scene image with GT pose overlaid, the
+    object reference images, and a JSON of all paths + pose values, so the
+    object<->scene<->pose<->path correspondence can be eyeballed."""
+    import torch
+    from torch.utils.data import DataLoader
+
+    from omnivggt.datasets.housecat6d import HouseCat6DCameraPose
+    from omnivggt.datasets import _intersection_collate
+
+    dataset = HouseCat6DCameraPose(
+        dataset_location=args.dataset_root,
+        object_image_root=args.object_image_root,
+        align_json=args.align_json,
+        dset=args.dset,
+        resolution=tuple(args.resolution),
+        seed=args.seed,
+        only_scene_name=args.only_scene_name,
+        only_object_name=args.only_object_name,
+        only_category=args.only_category,
+        scene_glob=args.scene_glob,
+        object_presence_prob=1.0,
+        relative_pose_pairing=args.relative_pose_pairing,
+        pair_min_frame_gap=args.pair_min_frame_gap,
+        max_records=args.max_records,
+    )
+
+    batch_size = int(args.batch_size)
+    sampler = dataset.make_sampler(batch_size, shuffle=True, world_size=1, rank=0, drop_last=True)
+    if hasattr(sampler, "set_epoch"):
+        sampler.set_epoch(0)
+    loader = DataLoader(
+        dataset,
+        sampler=sampler,
+        batch_size=batch_size,
+        num_workers=0,
+        collate_fn=_intersection_collate,
+        drop_last=True,
+    )
+    batch = next(iter(loader))
+
+    save_dir = Path(args.save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    print(f"pairing={args.relative_pose_pairing}  batch_size={batch_size}")
+    print(f"collated batch keys: {sorted(batch.keys())}")
+    print(f"images shape: {tuple(batch['images'].shape)}  object_images shape: {tuple(batch['object_images'].shape)}")
+
+    n_dump = min(int(args.dump_num), batch_size)
+    summary = []
+    for i in range(n_dump):
+        sample = _decollate_item(batch, i, batch_size)
+        overlay_path = save_pose_overlay(sample, save_dir, i, args.axis_length_scale)
+        pair_idx = i // 2 if args.relative_pose_pairing else None
+        rec = {
+            "batch_index": i,
+            "pair_index": pair_idx,
+            "scene_name": str(sample["scene_name"]),
+            "image_id": int(sample["ids"][0]),
+            "object_name": str(sample["object_name"]),
+            "object_id": int(sample["object_id"]),
+            "has_object": bool(sample["has_object"]),
+            "scene_rgb_path": str(sample["scene_rgb_path"]),
+            "object_rgb_paths": [str(p) for p in sample["object_rgb_paths"]],
+            "object_translation_metric": np.asarray(sample["object_translation_metric"]).reshape(-1).tolist(),
+            "overlay_path": str(overlay_path),
+        }
+        summary.append(rec)
+        tag = f"pair{pair_idx}:" if pair_idx is not None else ""
+        print(f"[{i}] {tag} {rec['scene_name']}/{rec['object_name']} frame={rec['image_id']} "
+              f"has_object={rec['has_object']} -> {overlay_path.name}")
+
+    if args.relative_pose_pairing:
+        print("-" * 60)
+        print("pair check (consecutive items should share scene+object, differ in frame):")
+        for p in range(0, n_dump - 1, 2):
+            a, b = summary[p], summary[p + 1]
+            ok = (a["scene_name"], a["object_name"]) == (b["scene_name"], b["object_name"]) and a["image_id"] != b["image_id"]
+            print(f"  pair {p//2}: {a['object_name']} frames=({a['image_id']},{b['image_id']})  {'OK' if ok else 'MISMATCH'}")
+
+    summary_path = save_dir / "batch_summary.json"
+    with summary_path.open("w", encoding="utf-8") as handle:
+        json.dump(summary, handle, indent=2)
+    print(f"\nsaved {n_dump} overlays + {summary_path}")
+
+
 def build_argparser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Verify HouseCat6D dataset samples and draw aligned axes.")
     parser.add_argument("--dataset-root", default=DEFAULT_DATA_ROOT)
@@ -229,6 +514,21 @@ def build_argparser() -> argparse.ArgumentParser:
     parser.add_argument("--axis-length-scale", type=float, default=0.65)
     parser.add_argument("--max-records", type=int, default=None)
     parser.add_argument("--no-save-overlays", action="store_true")
+    parser.add_argument("--test-relative-pose", action="store_true",
+                        help="Run the paired-sampler + relative-pose loss verification instead of overlays.")
+    parser.add_argument("--scene-glob", default="scene*")
+    parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument("--pair-min-frame-gap", type=int, default=20)
+    parser.add_argument(
+        "--symmetry-info-path",
+        default="/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/mixed_symmetry_info.json",
+    )
+    parser.add_argument("--dump-batch", action="store_true",
+                        help="Pull one batch through the real DataLoader (sampler+collate) and dump "
+                             "scene+object images, paths and GT pose overlay per item.")
+    parser.add_argument("--dump-num", type=int, default=8, help="How many batch items to dump.")
+    parser.add_argument("--relative-pose-pairing", action="store_true",
+                        help="Use the paired sampler so consecutive items are same-object pairs.")
     return parser
 
 
@@ -236,6 +536,15 @@ def main() -> None:
     from omnivggt.datasets.housecat6d import HouseCat6DCameraPose
 
     args = build_argparser().parse_args()
+
+    if args.test_relative_pose:
+        run_relative_pose_test(args)
+        return
+
+    if args.dump_batch:
+        run_dump_batch(args)
+        return
+
     dataset = HouseCat6DCameraPose(
         dataset_location=args.dataset_root,
         object_image_root=args.object_image_root,

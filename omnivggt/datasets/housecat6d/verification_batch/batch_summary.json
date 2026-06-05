@@ -1,0 +1,178 @@
+[
+  {
+    "batch_index": 0,
+    "pair_index": 0,
+    "scene_name": "scene01",
+    "image_id": 29,
+    "object_name": "cup-new_york_big",
+    "object_id": 73,
+    "has_object": true,
+    "scene_rgb_path": "/mnt/train-data-4-hdd/yian/freepose/housecat6d/scene01/rgb/000029.png",
+    "object_rgb_paths": [
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/cup-new_york_big/rgb/000001.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/cup-new_york_big/rgb/000005.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/cup-new_york_big/rgb/000010.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/cup-new_york_big/rgb/000015.png"
+    ],
+    "object_translation_metric": [
+      0.05722818896174431,
+      0.0007460305350832641,
+      0.5307389497756958
+    ],
+    "overlay_path": "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/omnivggt/datasets/housecat6d/verification_batch/000000_scene01_cup-new_york_big_000029_axes.png"
+  },
+  {
+    "batch_index": 1,
+    "pair_index": 0,
+    "scene_name": "scene01",
+    "image_id": 158,
+    "object_name": "cup-new_york_big",
+    "object_id": 73,
+    "has_object": true,
+    "scene_rgb_path": "/mnt/train-data-4-hdd/yian/freepose/housecat6d/scene01/rgb/000158.png",
+    "object_rgb_paths": [
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/cup-new_york_big/rgb/000001.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/cup-new_york_big/rgb/000005.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/cup-new_york_big/rgb/000010.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/cup-new_york_big/rgb/000015.png"
+    ],
+    "object_translation_metric": [
+      0.19118642807006836,
+      -0.10804499685764313,
+      0.5993435978889465
+    ],
+    "overlay_path": "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/omnivggt/datasets/housecat6d/verification_batch/000001_scene01_cup-new_york_big_000158_axes.png"
+  },
+  {
+    "batch_index": 2,
+    "pair_index": 1,
+    "scene_name": "scene01",
+    "image_id": 124,
+    "object_name": "can-kidney_beans",
+    "object_id": 56,
+    "has_object": true,
+    "scene_rgb_path": "/mnt/train-data-4-hdd/yian/freepose/housecat6d/scene01/rgb/000124.png",
+    "object_rgb_paths": [
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/can-kidney_beans/rgb/000001.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/can-kidney_beans/rgb/000005.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/can-kidney_beans/rgb/000010.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/can-kidney_beans/rgb/000015.png"
+    ],
+    "object_translation_metric": [
+      0.15961411595344543,
+      0.0438273549079895,
+      0.48573556542396545
+    ],
+    "overlay_path": "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/omnivggt/datasets/housecat6d/verification_batch/000002_scene01_can-kidney_beans_000124_axes.png"
+  },
+  {
+    "batch_index": 3,
+    "pair_index": 1,
+    "scene_name": "scene01",
+    "image_id": 254,
+    "object_name": "can-kidney_beans",
+    "object_id": 56,
+    "has_object": true,
+    "scene_rgb_path": "/mnt/train-data-4-hdd/yian/freepose/housecat6d/scene01/rgb/000254.png",
+    "object_rgb_paths": [
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/can-kidney_beans/rgb/000001.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/can-kidney_beans/rgb/000005.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/can-kidney_beans/rgb/000010.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/can-kidney_beans/rgb/000015.png"
+    ],
+    "object_translation_metric": [
+      0.05291595309972763,
+      0.10144935548305511,
+      0.42464712262153625
+    ],
+    "overlay_path": "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/omnivggt/datasets/housecat6d/verification_batch/000003_scene01_can-kidney_beans_000254_axes.png"
+  },
+  {
+    "batch_index": 4,
+    "pair_index": 2,
+    "scene_name": "scene01",
+    "image_id": 59,
+    "object_name": "cup-new_york_big",
+    "object_id": 73,
+    "has_object": true,
+    "scene_rgb_path": "/mnt/train-data-4-hdd/yian/freepose/housecat6d/scene01/rgb/000059.png",
+    "object_rgb_paths": [
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/cup-new_york_big/rgb/000001.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/cup-new_york_big/rgb/000005.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/cup-new_york_big/rgb/000010.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/cup-new_york_big/rgb/000015.png"
+    ],
+    "object_translation_metric": [
+      0.10085417330265045,
+      0.005983598995953798,
+      0.5558260679244995
+    ],
+    "overlay_path": "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/omnivggt/datasets/housecat6d/verification_batch/000004_scene01_cup-new_york_big_000059_axes.png"
+  },
+  {
+    "batch_index": 5,
+    "pair_index": 2,
+    "scene_name": "scene01",
+    "image_id": 251,
+    "object_name": "cup-new_york_big",
+    "object_id": 73,
+    "has_object": true,
+    "scene_rgb_path": "/mnt/train-data-4-hdd/yian/freepose/housecat6d/scene01/rgb/000251.png",
+    "object_rgb_paths": [
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/cup-new_york_big/rgb/000001.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/cup-new_york_big/rgb/000005.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/cup-new_york_big/rgb/000010.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/cup-new_york_big/rgb/000015.png"
+    ],
+    "object_translation_metric": [
+      0.061747822910547256,
+      0.07191814482212067,
+      0.5531108379364014
+    ],
+    "overlay_path": "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/omnivggt/datasets/housecat6d/verification_batch/000005_scene01_cup-new_york_big_000251_axes.png"
+  },
+  {
+    "batch_index": 6,
+    "pair_index": 3,
+    "scene_name": "scene01",
+    "image_id": 215,
+    "object_name": "remote-grey",
+    "object_id": 122,
+    "has_object": true,
+    "scene_rgb_path": "/mnt/train-data-4-hdd/yian/freepose/housecat6d/scene01/rgb/000215.png",
+    "object_rgb_paths": [
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/remote-grey/rgb/000001.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/remote-grey/rgb/000005.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/remote-grey/rgb/000010.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/remote-grey/rgb/000015.png"
+    ],
+    "object_translation_metric": [
+      0.059978775680065155,
+      -0.04117909073829651,
+      0.58251953125
+    ],
+    "overlay_path": "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/omnivggt/datasets/housecat6d/verification_batch/000006_scene01_remote-grey_000215_axes.png"
+  },
+  {
+    "batch_index": 7,
+    "pair_index": 3,
+    "scene_name": "scene01",
+    "image_id": 176,
+    "object_name": "remote-grey",
+    "object_id": 122,
+    "has_object": true,
+    "scene_rgb_path": "/mnt/train-data-4-hdd/yian/freepose/housecat6d/scene01/rgb/000176.png",
+    "object_rgb_paths": [
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/remote-grey/rgb/000001.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/remote-grey/rgb/000005.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/remote-grey/rgb/000010.png",
+      "/mnt/train-data-4-hdd/yian/freepose/housecat6d/housecat6d_aligned_object_refs_diverse24/remote-grey/rgb/000015.png"
+    ],
+    "object_translation_metric": [
+      0.17344319820404053,
+      -0.11398287862539291,
+      0.5748363733291626
+    ],
+    "overlay_path": "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/omnivggt/datasets/housecat6d/verification_batch/000007_scene01_remote-grey_000176_axes.png"
+  }
+]

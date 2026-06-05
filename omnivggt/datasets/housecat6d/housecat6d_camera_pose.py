@@ -14,7 +14,8 @@ from omnivggt.datasets.base.base_stereo_view_dataset import (
     transpose_to_landscape,
     view_name,
 )
-from omnivggt.datasets.base.batched_sampler import BatchedRandomSampler
+from omnivggt.datasets.base.batched_sampler import BatchedRandomSampler, PairedObjectBatchSampler
+from omnivggt.datasets.utils.transforms import ImgNorm
 import omnivggt.datasets.utils.cropping as cropping
 from omnivggt.utils.geometry import depthmap_to_absolute_camera_coordinates
 
@@ -57,6 +58,9 @@ class HouseCat6DCameraPose(BaseStereoViewDataset):
         normalize_object_translation_by_depth_mean: bool = True,
         depth_mean_eps: float = 1e-6,
         scene_glob: str = "scene*",
+        relative_pose_pairing: bool = False,
+        pair_min_frame_gap: int = 0,
+        object_ref_color_jitter: bool = False,
         *args,
         **kwargs,
     ):
@@ -80,6 +84,13 @@ class HouseCat6DCameraPose(BaseStereoViewDataset):
             raise ValueError(f"object_presence_prob must be in [0, 1], got {self.object_presence_prob}")
         self.normalize_object_translation_by_depth_mean = bool(normalize_object_translation_by_depth_mean)
         self.depth_mean_eps = float(depth_mean_eps)
+        self.relative_pose_pairing = bool(relative_pose_pairing)
+        self.pair_min_frame_gap = int(pair_min_frame_gap)
+        # Object reference renders are clean white-background images; keep them
+        # deterministic (ImgNorm only) so the object encoder output can be cached
+        # by object id. Scene-image augmentation (self.transform) is unaffected.
+        self.object_ref_color_jitter = bool(object_ref_color_jitter)
+        self.object_transform = self.transform if self.object_ref_color_jitter else ImgNorm
 
         self.align_data = self._load_json(self.align_json)
         hc_align = self.align_data["datasets"]["housecat6d"]
@@ -429,7 +440,7 @@ class HouseCat6DCameraPose(BaseStereoViewDataset):
             image_path = object_rec["object_dir"] / "rgb" / f"{image_id:06d}.png"
             image = Image.open(image_path).convert("RGB")
             true_shapes.append(np.array(image.size[::-1], dtype=np.int32))
-            tensors.append(self.transform(self._resize_image(image, resolution)))
+            tensors.append(self.object_transform(self._resize_image(image, resolution)))
             image_paths.append(str(image_path))
 
         return {
@@ -601,7 +612,52 @@ class HouseCat6DCameraPose(BaseStereoViewDataset):
         result.update(self._load_object_images(target_object_name, resolution, rng))
         return result
 
+    def build_pair_groups(self) -> tuple[list[list[int]], list[list[int]]]:
+        """Group record indices by (scene_name, object_name).
+
+        Returns parallel lists ``(groups, group_image_ids)`` where each group has
+        >= 2 frames of the same static object instance, used by
+        ``PairedObjectBatchSampler`` for the relative-pose loss.
+        """
+        from collections import defaultdict
+
+        buckets: Dict[tuple, List[int]] = defaultdict(list)
+        for idx, rec in enumerate(self.records):
+            buckets[(rec["scene_name"], rec["object_name"])].append(idx)
+
+        groups: List[List[int]] = []
+        group_image_ids: List[List[int]] = []
+        for members in buckets.values():
+            if len(members) >= 2:
+                groups.append(members)
+                group_image_ids.append([int(self.records[i]["image_id"]) for i in members])
+        return groups, group_image_ids
+
     def make_sampler(self, batch_size, shuffle=True, world_size=1, rank=0, drop_last=True):
+        if self.relative_pose_pairing:
+            groups, group_image_ids = self.build_pair_groups()
+            if not groups:
+                raise RuntimeError(
+                    "relative_pose_pairing=True but no (scene, object) group has >= 2 frames; "
+                    "cannot build cross-view pairs."
+                )
+            logger.info(
+                "HouseCat6DCameraPose paired sampler: %d eligible (scene,object) groups, "
+                "pair_min_frame_gap=%d",
+                len(groups),
+                self.pair_min_frame_gap,
+            )
+            return PairedObjectBatchSampler(
+                self,
+                batch_size=batch_size,
+                pool_size=len(self._resolutions),
+                groups=groups,
+                group_image_ids=group_image_ids,
+                world_size=world_size,
+                rank=rank,
+                drop_last=drop_last,
+                min_frame_gap=self.pair_min_frame_gap,
+            )
         return BatchedRandomSampler(
             self,
             batch_size=batch_size,

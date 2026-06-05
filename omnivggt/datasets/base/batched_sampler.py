@@ -75,6 +75,86 @@ def round_by(total, multiple, up=False):
     return (total//multiple) * multiple
 
 
+class PairedObjectBatchSampler:
+    """Yield indices so that consecutive pairs ``(2k, 2k+1)`` are two different
+    views of the *same static object instance*.
+
+    Used for the SMOC-Net style relative-pose regularization loss. Each ``group``
+    is a list of dataset record indices that share ``(scene, object)`` and has
+    >= 2 frames. The index returned is a tuple ``(record_idx, feat_idx)`` to match
+    the dataset ``__getitem__`` signature, and ``feat_idx`` (resolution pool id)
+    is held constant within every ``batch_size`` block, exactly like
+    ``BatchedRandomSampler``.
+    """
+
+    def __init__(self, dataset, batch_size, pool_size, groups, group_image_ids,
+                 world_size=1, rank=0, drop_last=True, min_frame_gap=0):
+        if batch_size % 2 != 0:
+            raise ValueError(f"PairedObjectBatchSampler requires an even batch_size, got {batch_size}")
+        if not groups:
+            raise ValueError("PairedObjectBatchSampler requires at least one group with >= 2 frames")
+        self.batch_size = batch_size
+        self.pool_size = pool_size
+        self.groups = [list(g) for g in groups]
+        self.group_image_ids = [list(ids) for ids in group_image_ids]
+        self.group_sizes = np.asarray([len(g) for g in self.groups], dtype=np.float64)
+        self.min_frame_gap = int(min_frame_gap)
+
+        self.len_dataset = N = len(dataset)
+        # total_size is the number of *individual* indices yielded per epoch,
+        # kept a multiple of batch_size so drop_last batches are always full.
+        self.total_size = round_by(N, batch_size) if drop_last else (N // 2) * 2
+        self.world_size = world_size
+        self.rank = rank
+        self.epoch = None
+
+    def __len__(self):
+        return self.total_size // self.world_size
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch
+
+    def _sample_pair(self, rng, group_idx):
+        members = self.groups[group_idx]
+        image_ids = self.group_image_ids[group_idx]
+        n = len(members)
+        i = int(rng.integers(n))
+        if self.min_frame_gap > 0:
+            for _ in range(8):
+                j = int(rng.integers(n))
+                if j != i and abs(image_ids[i] - image_ids[j]) >= self.min_frame_gap:
+                    return members[i], members[j]
+        # fall back to any distinct partner
+        j = int(rng.integers(n - 1))
+        if j >= i:
+            j += 1
+        return members[i], members[j]
+
+    def __iter__(self):
+        if self.epoch is None:
+            assert self.world_size == 1 and self.rank == 0, 'use set_epoch() if distributed mode is used'
+            seed = int(torch.empty((), dtype=torch.int64).random_().item())
+        else:
+            seed = self.epoch + 777
+        rng = np.random.default_rng(seed=seed)
+
+        n_pairs = self.total_size // 2
+        # sample a group per pair, weighted by group size (~uniform over frames)
+        probs = self.group_sizes / self.group_sizes.sum()
+        group_choices = rng.choice(len(self.groups), size=n_pairs, p=probs)
+
+        n_batches = (self.total_size + self.batch_size - 1) // self.batch_size
+        feat_idxs = rng.integers(self.pool_size, size=n_batches)
+        pairs_per_batch = self.batch_size // 2
+
+        for pair_pos, group_idx in enumerate(group_choices):
+            batch_idx = pair_pos // pairs_per_batch
+            feat_idx = int(feat_idxs[batch_idx])
+            rec_i, rec_j = self._sample_pair(rng, int(group_idx))
+            yield (int(rec_i), feat_idx)
+            yield (int(rec_j), feat_idx)
+
+
 class AnchorFrameSampler(BatchedRandomSampler):
     def __init__(self, dataset, batch_size, pool_size, world_size=1,
                  rank=0, drop_last=True, recent_buffer_size=10000):

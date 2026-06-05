@@ -29,7 +29,7 @@ class MultitaskLoss(torch.nn.Module):
     - Tracking loss (not cleaned yet, dirty code is at the bottom of this file)
     """
     def __init__(self, camera=None, depth=None, point=None, track=None, object_mask=None, object_srt=None,
-                 object_presence=None,
+                 object_presence=None, relative_pose=None,
                  debug_force_model_output_to_ground_truth=False, **kwargs):
         super().__init__()
         # Loss configuration dictionaries for each task
@@ -40,6 +40,7 @@ class MultitaskLoss(torch.nn.Module):
         self.object_mask = object_mask
         self.object_srt = object_srt
         self.object_presence = object_presence
+        self.relative_pose = relative_pose
         self.debug_force_model_output_to_ground_truth = bool(debug_force_model_output_to_ground_truth)
 
     def forward(self, predictions, batch) -> torch.Tensor:
@@ -98,6 +99,18 @@ class MultitaskLoss(torch.nn.Module):
             total_loss = total_loss + object_srt_loss_dict["loss_object_srt"] * self.object_srt["weight"]
             loss_dict.update(object_srt_loss_dict)
 
+        if "object_pose" in predictions and self.relative_pose is not None:
+            relative_pose_loss_dict = compute_object_relative_pose_loss(
+                predictions,
+                batch,
+                **self.relative_pose,
+            )
+            total_loss = (
+                total_loss
+                + relative_pose_loss_dict["loss_object_relative_pose"] * self.relative_pose["weight"]
+            )
+            loss_dict.update(relative_pose_loss_dict)
+
         if "object_presence_logits" in predictions and self.object_presence is not None:
             object_presence_loss_dict = compute_object_presence_loss(
                 predictions,
@@ -117,6 +130,33 @@ class MultitaskLoss(torch.nn.Module):
 
 def _rotation_matrix_to_rot6d(rotation_matrix: torch.Tensor) -> torch.Tensor:
     return rotation_matrix[..., :, :2].reshape(*rotation_matrix.shape[:-2], 6)
+
+
+def _rot6d_to_matrix(rot6d: torch.Tensor) -> torch.Tensor:
+    """Inverse of ``_rotation_matrix_to_rot6d``.
+
+    ``_rotation_matrix_to_rot6d`` flattens ``R[:, :2]`` row-major, so the 6D
+    vector is ``[R00, R01, R10, R11, R20, R21]``. The first object-frame column
+    is therefore ``rot6d[..., [0, 2, 4]]`` and the second ``rot6d[..., [1, 3, 5]]``.
+    We recover a proper rotation via Gram-Schmidt and rebuild it column-wise so
+    that the result is consistent with how the GT rotation is encoded for
+    ``compute_object_srt_loss``.
+    """
+    col0 = rot6d[..., [0, 2, 4]]
+    col1 = rot6d[..., [1, 3, 5]]
+    b0 = F.normalize(col0, dim=-1, eps=1e-8)
+    col1 = col1 - (b0 * col1).sum(dim=-1, keepdim=True) * b0
+    b1 = F.normalize(col1, dim=-1, eps=1e-8)
+    b2 = torch.cross(b0, b1, dim=-1)
+    return torch.stack([b0, b1, b2], dim=-1)
+
+
+def _geodesic_angle(rot_a: torch.Tensor, rot_b: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
+    """Geodesic (relative) angle in radians between batched rotation matrices."""
+    rel = torch.matmul(rot_a.transpose(-1, -2), rot_b)
+    trace = rel.diagonal(dim1=-2, dim2=-1).sum(dim=-1)
+    cos = ((trace - 1.0) * 0.5).clamp(-1.0 + eps, 1.0 - eps)
+    return torch.arccos(cos)
 
 
 def _rot6d_candidate_loss(pred: torch.Tensor, candidates: torch.Tensor, loss_type: str) -> torch.Tensor:
@@ -323,6 +363,134 @@ def compute_object_srt_loss(
         "loss_object_pose": loss_pose,
         "loss_object_translation": loss_translation,
         "loss_object_size": loss_size,
+    }
+
+
+def compute_object_relative_pose_loss(
+    predictions,
+    batch,
+    weight_rot=1.0,
+    weight_trans=0.0,
+    loss_type="l1",
+    symmetry_info_path="",
+    symmetry_continuous_steps=72,
+    **kwargs,
+):
+    """SMOC-Net style cross-view relative-pose regularization.
+
+    Assumes the batch is arranged so that consecutive samples ``(2k, 2k+1)`` are
+    two views of the *same static object instance*. The relative camera rotation
+    between the two views is recovered from the GT object rotations
+    (``R^o_i (R^o_j)^T``), and the predicted relative object rotation is forced to
+    match it (symmetry-aware). Pairs that fail a self-check (different object,
+    or either view missing the object) are masked out, so the loss is safe even
+    when pairing is disabled.
+    """
+    pred_pose = predictions["object_pose"]
+    pred_translation = predictions["object_translation"]
+    gt_rot = batch["object_rotation"].to(pred_pose)
+    batch_size = pred_pose.shape[0]
+
+    def _dummy():
+        z = (pred_pose * 0).mean()
+        return {"loss_object_relative_pose": z, "loss_rel_rot": z, "loss_rel_trans": z}
+
+    if batch_size < 2:
+        return _dummy()
+
+    # Build pair self-check: same object_id + dataset, both present.
+    n_pairs = batch_size // 2
+    idx_i = [2 * k for k in range(n_pairs)]
+    idx_j = [2 * k + 1 for k in range(n_pairs)]
+
+    has_object = batch.get("has_object", None)
+    if has_object is not None:
+        ho = has_object.to(pred_pose.device).bool().reshape(-1)
+    else:
+        ho = torch.ones(batch_size, dtype=torch.bool, device=pred_pose.device)
+
+    object_ids = batch.get("object_id", None)
+    object_ids_list = object_ids.detach().cpu().reshape(-1).tolist() if object_ids is not None else [None] * batch_size
+    dataset_labels = _labels_to_list(batch.get("dataset", None), batch_size)
+    scene_names = batch.get("scene_name", None)
+    scene_list = scene_names if isinstance(scene_names, (list, tuple)) else [None] * batch_size
+
+    pred_R = _rot6d_to_matrix(pred_pose)  # (B, 3, 3)
+
+    symmetry_info = (
+        _load_symmetry_info(str(symmetry_info_path), int(symmetry_continuous_steps))
+        if symmetry_info_path
+        else {}
+    )
+
+    rot_losses = []
+    trans_losses = []
+    scale = batch.get("object_translation_scale", None)
+    if scale is not None:
+        scale = scale.to(pred_pose).reshape(-1)
+    gt_translation = batch.get("object_translation_metric", batch.get("object_translation"))
+    gt_translation = gt_translation.to(pred_pose) if gt_translation is not None else None
+
+    for i, j in zip(idx_i, idx_j):
+        if not (bool(ho[i]) and bool(ho[j])):
+            continue
+        oid_i, oid_j = object_ids_list[i], object_ids_list[j]
+        if oid_i is None or oid_j is None or int(oid_i) != int(oid_j):
+            continue
+        if scene_list[i] is not None and scene_list[j] is not None and scene_list[i] != scene_list[j]:
+            continue
+
+        # GT relative camera rotation from GT object rotations.
+        gt_rel = gt_rot[i] @ gt_rot[j].transpose(-1, -2)
+        pred_rel = pred_R[i] @ pred_R[j].transpose(-1, -2)
+
+        # Symmetry-aware candidates: R_i_gt @ S @ R_j_gt^T over the symmetry group.
+        sym_rots = None
+        label = dataset_labels[i] if i < len(dataset_labels) else None
+        if label is not None and oid_i is not None:
+            sym_rots = symmetry_info.get(f"{label}:{int(oid_i)}")
+        if sym_rots is None and oid_i is not None:
+            sym_rots = symmetry_info.get(int(oid_i))
+
+        if sym_rots is None:
+            loss_rot = _geodesic_angle(pred_rel.unsqueeze(0), gt_rel.unsqueeze(0))[0]
+        else:
+            sym_rots = sym_rots.to(device=gt_rot.device, dtype=gt_rot.dtype)  # (K, 3, 3)
+            candidates = torch.matmul(
+                torch.matmul(gt_rot[i].unsqueeze(0), sym_rots), gt_rot[j].transpose(-1, -2).unsqueeze(0)
+            )  # (K, 3, 3)
+            angles = _geodesic_angle(pred_rel.unsqueeze(0).expand_as(candidates), candidates)  # (K,)
+            loss_rot = angles.min()
+        rot_losses.append(loss_rot)
+
+        # Optional relative-translation consistency (SE3 derived from GT poses).
+        if float(weight_trans) != 0.0 and scale is not None and gt_translation is not None:
+            R_rel_cam = gt_rot[i] @ gt_rot[j].transpose(-1, -2)
+            t_rel_cam = gt_translation[i] - R_rel_cam @ gt_translation[j]
+            t_i_metric = pred_translation[i] * scale[i]
+            t_j_metric = pred_translation[j] * scale[j]
+            pred_i_from_j = R_rel_cam @ t_j_metric + t_rel_cam
+            if loss_type == "l2":
+                trans_losses.append(((t_i_metric - pred_i_from_j) ** 2).mean())
+            else:
+                trans_losses.append((t_i_metric - pred_i_from_j).abs().mean())
+
+    if not rot_losses:
+        return _dummy()
+
+    loss_rot = torch.stack(rot_losses).mean()
+    loss_rot = check_and_fix_inf_nan(loss_rot, "loss_rel_rot")
+    if trans_losses:
+        loss_trans = torch.stack(trans_losses).mean()
+        loss_trans = check_and_fix_inf_nan(loss_trans, "loss_rel_trans")
+    else:
+        loss_trans = (pred_pose * 0).mean()
+
+    total = float(weight_rot) * loss_rot + float(weight_trans) * loss_trans
+    return {
+        "loss_object_relative_pose": total,
+        "loss_rel_rot": loss_rot,
+        "loss_rel_trans": loss_trans,
     }
 
 

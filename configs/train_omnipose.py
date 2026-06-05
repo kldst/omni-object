@@ -126,8 +126,8 @@ object_srt_weight_size = 1.0
 # keyed Omni6DPoseCameraPose:<object_id>. Symmetric objects (bottle/bowl/can/ball/...) get
 # their rotation equivalence set so the pose loss isn't penalized for equivalent rotations.
 # Remote: change this path to wherever omni6dpose_symmetry_info.json lives.
-# object_srt_symmetry_info_path = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/omni6dpose_symmetry_info.json"
-object_srt_symmetry_info_path = "/omni-object_clone_real/omni6dpose_symmetry_info.json"  # remote
+object_srt_symmetry_info_path = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/omni6dpose_symmetry_info.json"
+# object_srt_symmetry_info_path = "/omni-object_clone_real/omni6dpose_symmetry_info.json"  # remote
 object_srt_symmetry_continuous_steps = 72
 
 # Dataset

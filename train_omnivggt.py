@@ -395,6 +395,8 @@ def _prepare_batch_and_compute_loss(batch, model, criterion):
     }
     if 'object_images' in batch:
         inputs['object_images'] = batch['object_images']
+    if 'object_id' in batch:
+        inputs['object_ids'] = batch['object_id']
 
     predictions = model(**inputs)
 
@@ -425,7 +427,76 @@ def _ordered_loss_postfix(loss_details, preferred_keys):
     return ordered
 
 
-def run_validation(model, val_dataloader, criterion, accelerator, cfg, epoch, global_step, writer):
+def run_housecat_benchmark_validation(model, accelerator, cfg, epoch, global_step, writer):
+    """Multi-GPU HouseCat6D official benchmark, integrated into training.
+
+    Each DDP rank runs inference on a DISJOINT shard of test scenes using its own
+    (already-on-GPU) model replica and writes per-frame pkls to a shared dir. After
+    a barrier (so all ranks finish writing), rank 0 reads ALL pkls, computes mAP,
+    and logs to wandb/tb. With ``num_processes=1`` this degrades gracefully to the
+    single-GPU path (rank 0 does everything).
+    """
+    from housecat_benchmark import run_benchmark_inference, evaluate_and_collect
+
+    all_scenes = cfg.get(
+        "benchmark_scenes",
+        ["test_scene1", "test_scene2", "test_scene3", "test_scene4", "test_scene5"],
+    )
+    rank = accelerator.process_index
+    world = max(1, accelerator.num_processes)
+    my_scenes = list(all_scenes[rank::world])  # disjoint round-robin shard for this rank
+
+    out_dir = os.path.join(
+        cfg.get("output_dir"), cfg.get("exp_name"), "benchmark", f"step_{global_step}"
+    )
+    base_model = accelerator.unwrap_model(model)
+    base_model.eval()
+
+    if accelerator.is_main_process:
+        logger.info("=" * 60)
+        logger.info(f"HouseCat6D benchmark at epoch {epoch + 1} (step {global_step}); "
+                    f"{len(all_scenes)} scenes across {world} rank(s)")
+        logger.info("=" * 60)
+    logger.info(f"[benchmark][rank {rank}] scenes={my_scenes or '(none, will just wait at barrier)'}")
+
+    if my_scenes:
+        run_benchmark_inference(
+            base_model,
+            accelerator.device,
+            housecat_root=cfg.get("housecat6d_root") or cfg.get("benchmark_housecat_root"),
+            align_json=cfg.get("align_json") or cfg.get("benchmark_align_json"),
+            object_image_root=cfg.get("housecat6d_object_image_root") or cfg.get("benchmark_object_image_root"),
+            view_ids=cfg.get("fixed_object_view_ids", (0, 5, 8, 19)),
+            scenes=my_scenes,
+            output_dir=out_dir,
+            frame_stride=cfg.get("benchmark_frame_stride", 5),
+            batch_size=cfg.get("benchmark_batch_size", cfg.get("val_batch_images", 8)),
+            num_workers=cfg.get("num_workers", 4),
+            amp=cfg.get("mixed_precision", "bf16") != "no",
+            limit=cfg.get("benchmark_limit", None),
+        )
+
+    accelerator.wait_for_everyone()  # all ranks finished writing pkls
+
+    metrics = None
+    if accelerator.is_main_process:
+        metrics = evaluate_and_collect(out_dir, all_scenes)  # gather: read every rank's pkls
+        logger.info(f"[benchmark] metrics: {metrics}")
+        if metrics:
+            if cfg.get("wandb", False):
+                wandb.log({f"val_bench/{k}": v for k, v in metrics.items()}, step=global_step)
+            if writer is not None:
+                for k, v in metrics.items():
+                    writer.add_scalar(f"val_bench/{k}", float(v), global_step)
+
+    accelerator.wait_for_everyone()  # hold ranks until rank0 finishes evaluating
+    return metrics
+
+
+def run_validation(model, val_dataloader, criterion, accelerator, cfg, epoch, global_step, writer=None):
+    if cfg.get("validation_mode", "loss") == "benchmark":
+        return run_housecat_benchmark_validation(model, accelerator, cfg, epoch, global_step, writer)
+
     if val_dataloader is None:
         return None
 
@@ -969,7 +1040,7 @@ if __name__ == '__main__':
             accelerator.save_state(epoch_save_path)
 
         if (
-            val_dataloader is not None
+            (val_dataloader is not None or cfg.get("validation_mode", "loss") == "benchmark")
             and (epoch + 1) % cfg.get("val_epoch_freq", 1) == 0
         ):
             run_validation(
@@ -991,7 +1062,7 @@ if __name__ == '__main__':
     logger.info("Training Completed!")
     logger.info("=" * 60)
 
-    if val_dataloader is not None and cfg.get('num_train_epochs', 0) > 0:
+    if (val_dataloader is not None or cfg.get("validation_mode", "loss") == "benchmark") and cfg.get('num_train_epochs', 0) > 0:
         run_validation(
             model=model,
             val_dataloader=val_dataloader,

@@ -267,6 +267,8 @@ def load_model(cfg: Any, device: torch.device) -> Tuple[OmniVGGT, torch.dtype]:
         object_prototype_num_tokens=cfg.get("object_prototype_num_tokens", 4),
         object_prototype_object_encoder_no_grad=cfg.get("object_prototype_object_encoder_no_grad", False),
         object_cross_attn_heads=cfg.get("object_cross_attn_heads", 16),
+        object_encode_cache=cfg.get("object_encode_cache", False),
+        object_encode_cache_max=cfg.get("object_encode_cache_max", 256),
     )
 
     # Print network parameters and their indices
@@ -535,6 +537,14 @@ def build_loss_criterion(cfg: Any) -> MultitaskLoss:
             "weight": cfg.get("object_presence_loss_weight", 1.0),
             "pos_weight": cfg.get("object_presence_pos_weight", None),
         } if cfg.get("enable_object_presence", cfg.get("enable_object_srt", False)) else None,
+        relative_pose={
+            "weight": cfg.get("relative_pose_loss_weight", 0.0),
+            "weight_rot": cfg.get("relative_pose_weight_rot", 1.0),
+            "weight_trans": cfg.get("relative_pose_weight_trans", 0.0),
+            "loss_type": cfg.get("relative_pose_loss_type", "l1"),
+            "symmetry_info_path": cfg.get("object_srt_symmetry_info_path", ""),
+            "symmetry_continuous_steps": cfg.get("object_srt_symmetry_continuous_steps", 72),
+        } if cfg.get("enable_object_srt", False) and cfg.get("relative_pose_loss_weight", 0.0) > 0 else None,
     )
     
     logger.info("Loss criterion initialized:")
@@ -548,6 +558,10 @@ def build_loss_criterion(cfg: Any) -> MultitaskLoss:
             f"  Object size loss weight: "
             f"{cfg.get('object_srt_weight_size', 0.0) if cfg.get('enable_object_size', True) else 0.0}"
         )
+    if cfg.get("enable_object_srt", False) and cfg.get("relative_pose_loss_weight", 0.0) > 0:
+        logger.info(f"  Relative-pose loss weight: {cfg.get('relative_pose_loss_weight', 0.0)} "
+                    f"(rot={cfg.get('relative_pose_weight_rot', 1.0)}, "
+                    f"trans={cfg.get('relative_pose_weight_trans', 0.0)})")
     if cfg.get("enable_object_mask", False):
         logger.info(f"  Object mask loss weight: {cfg.get('object_mask_loss_weight', 1.0)}")
     if cfg.get("enable_object_presence", cfg.get("enable_object_srt", False)):
