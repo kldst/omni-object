@@ -14,7 +14,7 @@
 #   5. Smaller dataset → faster epoch, so checkpointing_steps reduced to 1000.
 
 output_dir = "outputs"
-exp_name = "hc_only_diverse24_warmstart_14k_0530_regular_cache"
+exp_name = "hc_only_diverse24_warmstart_14k_0530_regular_cache_2"
 logging_dir = "logs"
 
 wandb = True
@@ -26,7 +26,7 @@ checkpointing_steps = 688  # smaller dataset -> save more often
 
 # Model
 # model_url = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/outputs/0521/14000/model.safetensors"
-model_url = "/omni-object_clone_real/outputs/oo9d_real275_ycbv_hc_camera_pose_size_mask_presence_0528/checkpoint-0-4000/model.safetensors"
+model_url = "/omni-object_clone_real/outputs/hc_only_diverse24_warmstart_14k_0530_regular_cache/checkpoint-1-688/model.safetensors"
 model_load_strict = False
 model_requires_grad = False
 patch_embed_freeze = True
