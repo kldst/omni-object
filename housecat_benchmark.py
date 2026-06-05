@@ -122,6 +122,7 @@ def run_benchmark_inference(
     num_workers: int = 4,
     amp: bool = True,
     limit: Optional[int] = None,
+    object_ref_color_jitter: bool = False,
 ) -> int:
     """Run inference on the given (shard of) scenes and write per-frame pkls into
     ``output_dir/<scene>/``. Does NOT evaluate. Returns total frames written.
@@ -139,6 +140,7 @@ def run_benchmark_inference(
         object_image_root=str(object_image_root),
         view_ids=list(int(v) for v in view_ids),
         frame_stride=int(frame_stride),
+        object_ref_color_jitter=bool(object_ref_color_jitter),
     )
 
     total_frames = 0

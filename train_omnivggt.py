@@ -452,10 +452,18 @@ def run_housecat_benchmark_validation(model, accelerator, cfg, epoch, global_ste
     base_model = accelerator.unwrap_model(model)
     base_model.eval()
 
+    # Benchmark may use the object-encoder cache independently of training (same
+    # object appears in many test frames -> big speedup). Toggle it just for the
+    # benchmark, then restore + clear so training memory/behaviour is unaffected.
+    prev_cache = base_model.object_encode_cache
+    base_model.object_encode_cache = bool(cfg.get("benchmark_object_encode_cache", True))
+    base_model.clear_object_cache()
+
     if accelerator.is_main_process:
         logger.info("=" * 60)
         logger.info(f"HouseCat6D benchmark at epoch {epoch + 1} (step {global_step}); "
-                    f"{len(all_scenes)} scenes across {world} rank(s)")
+                    f"{len(all_scenes)} scenes across {world} rank(s); "
+                    f"object_encode_cache={base_model.object_encode_cache}")
         logger.info("=" * 60)
     logger.info(f"[benchmark][rank {rank}] scenes={my_scenes or '(none, will just wait at barrier)'}")
 
@@ -474,7 +482,12 @@ def run_housecat_benchmark_validation(model, accelerator, cfg, epoch, global_ste
             num_workers=cfg.get("num_workers", 4),
             amp=cfg.get("mixed_precision", "bf16") != "no",
             limit=cfg.get("benchmark_limit", None),
+            object_ref_color_jitter=bool(cfg.get("benchmark_object_ref_color_jitter", False)),
         )
+
+    # Restore training cache state and free the benchmark cache memory.
+    base_model.object_encode_cache = prev_cache
+    base_model.clear_object_cache()
 
     accelerator.wait_for_everyone()  # all ranks finished writing pkls
 

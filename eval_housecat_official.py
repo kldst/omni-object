@@ -95,6 +95,7 @@ def build_dataset(scene: str, args) -> HouseCat6DTestSceneCameraPose:
         z_far=20,
         resolution=DEFAULT_RESOLUTION,
         transform=ImgNorm,
+        object_ref_color_jitter=bool(getattr(args, "object_ref_color_jitter", False)),
         seed=42,
     )
     frame_stride = int(getattr(args, "frame_stride", 1) or 1)
@@ -158,6 +159,7 @@ def run_scene_inference(
                     mask=batch_dev["valid_mask"],
                     camera_gt_index=[],
                     depth_gt_index=[0],
+                    object_ids=batch_dev.get("object_id"),  # enables the object-encoder cache if on
                 )
         if "object_pose" not in outputs or "object_translation" not in outputs:
             raise RuntimeError(f"Model output missing pose keys: {sorted(outputs.keys())}")

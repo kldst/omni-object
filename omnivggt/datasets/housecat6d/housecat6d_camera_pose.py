@@ -15,7 +15,7 @@ from omnivggt.datasets.base.base_stereo_view_dataset import (
     view_name,
 )
 from omnivggt.datasets.base.batched_sampler import BatchedRandomSampler, PairedObjectBatchSampler
-from omnivggt.datasets.utils.transforms import ImgNorm
+from omnivggt.datasets.utils.transforms import ImgNorm, ColorJitter
 import omnivggt.datasets.utils.cropping as cropping
 from omnivggt.utils.geometry import depthmap_to_absolute_camera_coordinates
 
@@ -86,11 +86,14 @@ class HouseCat6DCameraPose(BaseStereoViewDataset):
         self.depth_mean_eps = float(depth_mean_eps)
         self.relative_pose_pairing = bool(relative_pose_pairing)
         self.pair_min_frame_gap = int(pair_min_frame_gap)
-        # Object reference renders are clean white-background images; keep them
-        # deterministic (ImgNorm only) so the object encoder output can be cached
-        # by object id. Scene-image augmentation (self.transform) is unaffected.
+        # Object reference transform, decoupled from the scene transform:
+        #   object_ref_color_jitter=False -> ImgNorm (deterministic; required for the
+        #     object-encoder cache to be correct).
+        #   object_ref_color_jitter=True  -> ColorJitter augmentation on refs
+        #     (independent of the scene transform; NOT cache-safe -- the cache would
+        #     freeze one random jitter per object id).
         self.object_ref_color_jitter = bool(object_ref_color_jitter)
-        self.object_transform = self.transform if self.object_ref_color_jitter else ImgNorm
+        self.object_transform = ColorJitter if self.object_ref_color_jitter else ImgNorm
 
         self.align_data = self._load_json(self.align_json)
         hc_align = self.align_data["datasets"]["housecat6d"]

@@ -155,6 +155,27 @@ R^o_i,pred (R^o_j,pred)^T ≈ R^o_i,gt · (S_a S_b^T) · (R^o_j,gt)^T,   S_a S_b
   ```
 - **驗證**:scene01、batch 8、pairing 開 → 4 對全部同物體不同 frame(pair check OK);抽看 `can-kidney_beans` overlay,3D bbox/軸正確落在該物體上、下方 4 張 ref 也對應同物體 ✅。
 
+## D. Train / Benchmark 的 cache 與 ColorJitter 分流(0605 第三批)
+依使用者需求,**訓練**與 **benchmark** 對 object refs 的 augmentation 與 cache 採不同策略:
+
+| | object refs transform | object encoder cache | 理由 |
+|---|---|---|---|
+| **訓練** | **ColorJitter**(`object_ref_color_jitter=True`,訓練 dataset 字串) | **OFF**(`object_encode_cache=False`) | 還原 ref augmentation;且 colorjit refs 非確定性,本來就不能 cache。cache 關掉也省 GPU 記憶體(batch 60 + activation,16GB 吃緊)。 |
+| **benchmark** | **ColorJitter**(`benchmark_object_ref_color_jitter=True`) | **ON**(`benchmark_object_encode_cache=True`,僅 benchmark 期間暫開) | eval 無 backprop activation、同物體跨多 frame → cache 大幅加速。 |
+
+實作:
+- dataset `object_transform = ColorJitter if object_ref_color_jitter else ImgNorm`(**與 scene transform 解耦**,benchmark scene 用 ImgNorm 時 refs 仍能 colorjit)。
+- benchmark dataset 透過 [eval_housecat_official.py `build_dataset`](../../eval_housecat_official.py) 收 `object_ref_color_jitter`;`run_scene_inference` 的 `model.inference(..., object_ids=...)` 把 object_id 傳進去(cache 才會生效)。
+- [train_omnivggt.py `run_housecat_benchmark_validation`](../../train_omnivggt.py):benchmark 前 `base_model.object_encode_cache = benchmark_object_encode_cache` + `clear_object_cache()`;跑完**還原** `prev` 並再 `clear_object_cache()`(釋放記憶體、不影響訓練)。
+- ⚠️ **colorjit + cache 的語意**:cache 用 `object_id` 當 key,所以某物體**第一次**被讀到的「那組隨機 colorjit 編碼」會被凍結、之後該物體所有 frame 都重用 → 每物體**一個固定的隨機增強版本**(非每 frame 重抽)。要乾淨 refs 就把 `benchmark_object_ref_color_jitter=False`。
+
+### Object cache 記憶體
+- cache 存「per-layer ViT tokens」在 **GPU** 上,約 **~41MB/物體**(4 層 ×4 視角 ×~1263 token ×1024 ×bf16);上界 `min(物體數, object_encode_cache_max=256)`。HouseCat6D ~190 物體 → 滿載 ~8GB,**訓練時 16GB 卡會吃緊 → 所以訓練關 cache**。會增長到看完所有物體後**持平**(非 leak)。若要訓練也開 cache,建議改存 CPU(尚未實作,可再加 `object_encode_cache_device`)。
+
+### 驗證(0605 第三批)
+- config 載入:`object_encode_cache=False`、`benchmark_object_encode_cache=True`、`benchmark_object_ref_color_jitter=True`、train_dataset 含 `object_ref_color_jitter=True` ✅
+- benchmark 路徑(單卡,colorjit refs + cache ON,test_scene1,12 frame):cache 用到 **10 個物體**(跨 frame 重用)、跑完 `clear_object_cache()` → 0、metrics 正常回傳 ✅(colorjit + cache 共存不崩)
+
 ## 注意事項 / TODO 提醒
 - benchmark 用的 `view_ids` / `object_image_root` 會自動取 config 的 `fixed_object_view_ids`(0,5,8,19)與 `housecat6d_object_image_root`(diverse24),與訓練一致。
 - benchmark 較重:全 5 scene × frame_stride=5。要更快可調大 `benchmark_frame_stride` 或設 `benchmark_limit`;頻率由 `val_epoch_freq` 控制。

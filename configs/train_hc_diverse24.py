@@ -47,11 +47,12 @@ object_prototype_layer_indices = (4, 11, 17, 23)
 object_prototype_num_tokens = 32
 object_prototype_object_encoder_no_grad = True
 object_cross_attn_heads = 16
-# Object-encoder token cache: reuse the frozen reference-image ViT tokens across
-# batches/epochs (keyed by object id). Requires object_prototype_object_encoder_no_grad
-# (above) + frozen object encoder + deterministic refs (object_ref_color_jitter off,
-# set in the dataset string below). The trainable poolers still run live.
-object_encode_cache = True
+# Object-encoder token cache.
+#   Training: OFF (saves GPU memory; train refs use ColorJitter -> non-deterministic,
+#             not cache-safe anyway -- see object_ref_color_jitter=True in train_dataset).
+#   Benchmark: ON via benchmark_object_encode_cache below (eval has no backprop
+#             activations; same object recurs across many frames -> big speedup).
+object_encode_cache = False
 object_encode_cache_max = 256
 object_pose_context_pool = "flatten"
 object_pose_use_global_scene_object_concat = False
@@ -156,8 +157,16 @@ val_max_records_per_dataset = 1000
 validation_mode = "benchmark"
 benchmark_scenes = ["test_scene1", "test_scene2", "test_scene3", "test_scene4", "test_scene5"]
 benchmark_frame_stride = 1       # subsample frames per scene to bound eval time
-benchmark_batch_size = 60
+benchmark_batch_size = 30
 benchmark_limit = None           # cap samples/scene for smoke tests (None = full)
+# Benchmark-only object-encoder cache (independent of training's object_encode_cache):
+# eval has no backprop, same object recurs across frames -> big speedup. Toggled on
+# only during the benchmark, then cleared.
+benchmark_object_encode_cache = True
+# Use ColorJitter on benchmark object refs too. NOTE: with the cache ON, this freezes
+# ONE random jitter per object id (cached on first occurrence, reused for all its
+# frames) -- not per-frame augmentation. Set False for clean/deterministic refs.
+benchmark_object_ref_color_jitter = True
 
 # freepose_root = "/mnt/train-data-4-hdd/yian/freepose"
 # omni_root = f"{freepose_root}/omni-object_clone"
@@ -191,6 +200,9 @@ train_dataset = (
     "z_far=20, "
     f"resolution={resolution}, "
     "transform=ColorJitter, "
+    # Object refs use ColorJitter during training (restored). NOTE: this makes refs
+    # non-deterministic, so training must keep object_encode_cache=False (it is).
+    "object_ref_color_jitter=True, "
     "scene_glob='scene*', "  # train scenes: scene01..scene34
     # Pair consecutive batch items (2k, 2k+1) as two views of the same static
     # object instance, for the SMOC-Net relative-pose loss. Requires even
