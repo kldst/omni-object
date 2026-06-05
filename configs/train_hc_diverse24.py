@@ -14,7 +14,7 @@
 #   5. Smaller dataset → faster epoch, so checkpointing_steps reduced to 1000.
 
 output_dir = "outputs"
-exp_name = "hc_only_diverse24_warmstart_14k_0530_regular_cache_2"
+exp_name = "hc_only_diverse24_warmstart_14k_0530_regular_cache_0606"
 logging_dir = "logs"
 
 wandb = True
