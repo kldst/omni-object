@@ -123,12 +123,18 @@ def run_benchmark_inference(
     amp: bool = True,
     limit: Optional[int] = None,
     object_ref_color_jitter: bool = False,
+    shard_id: int = 0,
+    num_shards: int = 1,
 ) -> int:
-    """Run inference on the given (shard of) scenes and write per-frame pkls into
+    """Run inference on the given scenes and write per-frame pkls into
     ``output_dir/<scene>/``. Does NOT evaluate. Returns total frames written.
 
-    Safe to call concurrently from multiple DDP ranks as long as each rank gets a
-    DISJOINT ``scenes`` shard (pkls are written under per-scene subdirs).
+    Frame-level sharding (load balanced): every rank is given the SAME ``scenes``
+    list, but processes only the interleaved frame slice ``records[shard_id::num_shards]``
+    of each scene. This spreads ~equal frame counts across ranks regardless of how
+    big each scene is (whole-scene sharding left the rank with 2 scenes running ~2x
+    longer). Every frame is still covered exactly once across ranks, and per-frame
+    pkls never collide because frame ids are disjoint between shards.
     ``model`` must be the unwrapped module on ``device`` in eval mode.
     """
     output_dir = Path(output_dir)
@@ -146,6 +152,11 @@ def run_benchmark_inference(
     total_frames = 0
     for scene in scenes:
         dataset = build_dataset(scene, args)
+        if int(num_shards) > 1 and hasattr(dataset, "records"):
+            dataset.records = dataset.records[int(shard_id)::int(num_shards)]
+            dataset.scenes = dataset.records
+            if len(dataset.records) == 0:
+                continue  # this rank drew no frames from this scene
         by_image = run_scene_inference(
             scene=scene,
             dataset=dataset,

@@ -89,6 +89,18 @@ save_each_epoch = False
 val_only = False
 resume_model_path = None
 
+# validate_at_start: run ONE validation pass (here validation_mode="benchmark", so
+# the HouseCat6D mAP benchmark) on the loaded weights BEFORE the training loop, then
+# continue training normally (epoch -> val -> epoch ...). Use this to (re)run the
+# post-epoch-1 benchmark of a saved checkpoint without redoing the epoch.
+#   * To also continue training from where epoch 1 ended, set resume_model_path to the
+#     accelerate checkpoint DIR (e.g. ".../checkpoint-1-688"); load_state restores
+#     optimizer/scheduler/RNG and initial_epoch, so the loop resumes from there.
+#   * To just load weights (training schedule restarts from epoch 0), set model_url to
+#     the model.safetensors instead and leave resume_model_path=None.
+validate_at_start = True
+# resume_model_path = "outputs/hc_only_diverse24_warmstart_14k_0530_regular_cache/checkpoint-1-688"
+
 # Optimizer
 optimizer_type = "adamw"
 adam_beta1 = 0.9

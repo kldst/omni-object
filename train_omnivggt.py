@@ -4,6 +4,7 @@
 import os
 import gc
 from collections import Counter
+from datetime import timedelta
 from pathlib import Path
 
 # os.environ['CUDA_VISIBLE_DEVICES'] = '0'
@@ -16,7 +17,7 @@ from tqdm import tqdm
 import itertools
 
 from accelerate.logging import get_logger
-from accelerate.utils import ProjectConfiguration, set_seed, DistributedDataParallelKwargs
+from accelerate.utils import ProjectConfiguration, set_seed, DistributedDataParallelKwargs, InitProcessGroupKwargs
 
 from omnivggt.utils.configs import parse_configs
 from omnivggt.datasets.utils.misc import merge_dicts
@@ -444,7 +445,12 @@ def run_housecat_benchmark_validation(model, accelerator, cfg, epoch, global_ste
     )
     rank = accelerator.process_index
     world = max(1, accelerator.num_processes)
-    my_scenes = list(all_scenes[rank::world])  # disjoint round-robin shard for this rank
+    # Frame-level sharding: every rank runs ALL scenes but only the interleaved
+    # frame slice records[rank::world], so each GPU gets ~equal frame counts and
+    # finishes around the same time (whole-scene sharding gave the rank with 2
+    # scenes ~2x the work, stranding the others at the wait_for_everyone() barrier
+    # until the NCCL timeout killed the job).
+    my_scenes = list(all_scenes)
 
     out_dir = os.path.join(
         cfg.get("output_dir"), cfg.get("exp_name"), "benchmark", f"step_{global_step}"
@@ -465,25 +471,26 @@ def run_housecat_benchmark_validation(model, accelerator, cfg, epoch, global_ste
                     f"{len(all_scenes)} scenes across {world} rank(s); "
                     f"object_encode_cache={base_model.object_encode_cache}")
         logger.info("=" * 60)
-    logger.info(f"[benchmark][rank {rank}] scenes={my_scenes or '(none, will just wait at barrier)'}")
+    logger.info(f"[benchmark][rank {rank}] frame-shard {rank}/{world} over scenes={my_scenes}")
 
-    if my_scenes:
-        run_benchmark_inference(
-            base_model,
-            accelerator.device,
-            housecat_root=cfg.get("housecat6d_root") or cfg.get("benchmark_housecat_root"),
-            align_json=cfg.get("align_json") or cfg.get("benchmark_align_json"),
-            object_image_root=cfg.get("housecat6d_object_image_root") or cfg.get("benchmark_object_image_root"),
-            view_ids=cfg.get("fixed_object_view_ids", (0, 5, 8, 19)),
-            scenes=my_scenes,
-            output_dir=out_dir,
-            frame_stride=cfg.get("benchmark_frame_stride", 5),
-            batch_size=cfg.get("benchmark_batch_size", cfg.get("val_batch_images", 8)),
-            num_workers=cfg.get("num_workers", 4),
-            amp=cfg.get("mixed_precision", "bf16") != "no",
-            limit=cfg.get("benchmark_limit", None),
-            object_ref_color_jitter=bool(cfg.get("benchmark_object_ref_color_jitter", False)),
-        )
+    run_benchmark_inference(
+        base_model,
+        accelerator.device,
+        housecat_root=cfg.get("housecat6d_root") or cfg.get("benchmark_housecat_root"),
+        align_json=cfg.get("align_json") or cfg.get("benchmark_align_json"),
+        object_image_root=cfg.get("housecat6d_object_image_root") or cfg.get("benchmark_object_image_root"),
+        view_ids=cfg.get("fixed_object_view_ids", (0, 5, 8, 19)),
+        scenes=my_scenes,
+        output_dir=out_dir,
+        frame_stride=cfg.get("benchmark_frame_stride", 5),
+        batch_size=cfg.get("benchmark_batch_size", cfg.get("val_batch_images", 8)),
+        num_workers=cfg.get("num_workers", 4),
+        amp=cfg.get("mixed_precision", "bf16") != "no",
+        limit=cfg.get("benchmark_limit", None),
+        object_ref_color_jitter=bool(cfg.get("benchmark_object_ref_color_jitter", False)),
+        shard_id=rank,
+        num_shards=world,
+    )
 
     # Restore training cache state and free the benchmark cache memory.
     base_model.object_encode_cache = prev_cache
@@ -631,12 +638,22 @@ if __name__ == '__main__':
         gradient_as_bucket_view=False,
     )
 
+    # Benchmark validation shards whole scenes round-robin across ranks, so the
+    # rank that draws 2 scenes can run ~2x longer than the others. The fast ranks
+    # then block on accelerator.wait_for_everyone() (an NCCL collective) until the
+    # straggler arrives. The default process-group timeout is only 10 min, so a
+    # slow full-resolution benchmark trips the NCCL watchdog and kills the whole
+    # job. Give collectives a generous timeout (default 1h, configurable).
+    init_kwargs = InitProcessGroupKwargs(
+        timeout=timedelta(seconds=int(cfg.get("ddp_timeout_seconds", 3600)))
+    )
+
     accelerator = accelerate.Accelerator(
         mixed_precision=cfg.get("mixed_precision", "no "),
         log_with=cfg.get("report_to", "tensorboard"),
         project_config=accelerator_project_config,
         gradient_accumulation_steps=cfg.get("gradient_accumulation_steps", 1),
-        kwargs_handlers=[ddp_kwargs],
+        kwargs_handlers=[ddp_kwargs, init_kwargs],
     )
     
     setup_logging(accelerator)
@@ -870,6 +887,31 @@ if __name__ == '__main__':
     # 7. Training Loop
     # ======================================================
     global_step = initial_step
+
+    # Optional: run ONE validation pass on the just-loaded weights BEFORE the
+    # training loop starts, then continue training normally. Useful to reproduce
+    # the post-epoch benchmark of a resumed checkpoint (e.g. when that benchmark
+    # crashed) without redoing the epoch. Works with both resume_model_path (full
+    # state restore -> training continues from initial_epoch) and a plain weight
+    # load. In "benchmark" validation_mode this is the HouseCat6D mAP benchmark.
+    if cfg.get("validate_at_start", False):
+        logger.info("=" * 60)
+        logger.info(f"Startup validation on loaded weights "
+                    f"(epoch={initial_epoch}, global_step={global_step})")
+        logger.info("=" * 60)
+        run_validation(
+            model=model,
+            val_dataloader=val_dataloader,
+            criterion=train_criterion,
+            accelerator=accelerator,
+            cfg=cfg,
+            epoch=max(0, initial_epoch - 1),
+            global_step=global_step,
+            writer=writer,
+        )
+        model.train()
+        accelerator.wait_for_everyone()
+
     accumulation_steps = cfg.get("gradient_accumulation_steps", 2)
     debug_print_object_paths = bool(cfg.get("debug_print_object_paths", False))
     debug_print_object_paths_steps = int(cfg.get("debug_print_object_paths_steps", 1))
