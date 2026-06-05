@@ -174,7 +174,7 @@ benchmark_limit = None           # cap samples/scene for smoke tests (None = ful
 # Benchmark-only object-encoder cache (independent of training's object_encode_cache):
 # eval has no backprop, same object recurs across frames -> big speedup. Toggled on
 # only during the benchmark, then cleared.
-benchmark_object_encode_cache = True
+benchmark_object_encode_cache = False
 # Use ColorJitter on benchmark object refs too. NOTE: with the cache ON, this freezes
 # ONE random jitter per object id (cached on first occurrence, reused for all its
 # frames) -- not per-frame augmentation. Set False for clean/deterministic refs.
