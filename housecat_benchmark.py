@@ -160,7 +160,16 @@ def run_benchmark_inference(
     for scene in scenes:
         dataset = build_dataset(scene, args)
         if int(num_shards) > 1 and hasattr(dataset, "records"):
-            dataset.records = dataset.records[int(shard_id)::int(num_shards)]
+            # CRITICAL: records are per-OBJECT here (expand_records_by_object=True),
+            # so we must shard by FRAME (image_id), NOT by record. write_scene_pkls
+            # writes one <image_id>.pkl per frame to a shared dir; if two shards each
+            # hold some objects of the same frame, their pkls overwrite each other and
+            # all-but-one shard's predictions for that frame are lost -> recall (and
+            # hence IoU/pose mAP) collapses. Sharding whole frames keeps every frame's
+            # objects together in exactly one shard, written exactly once.
+            frame_ids = sorted({int(r.get("image_id", 0)) for r in dataset.records})
+            my_frames = set(frame_ids[int(shard_id)::int(num_shards)])
+            dataset.records = [r for r in dataset.records if int(r.get("image_id", 0)) in my_frames]
             dataset.scenes = dataset.records
             if len(dataset.records) == 0:
                 continue  # this rank drew no frames from this scene
