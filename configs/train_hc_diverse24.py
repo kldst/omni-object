@@ -176,7 +176,7 @@ relative_pose_weight_trans = 0.0   # translation consistency off by default
 relative_pose_loss_type = "l1"
 
 #* Dataset
-train_batch_images = 30
+train_batch_images = 50
 # val_batch_images = 60
 val_epoch_freq = 1      # eval more often since training data is smaller
 num_workers = 0
