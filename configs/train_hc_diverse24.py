@@ -22,7 +22,7 @@ tensorboard = False
 report_to = "tensorboard"
 num_save_log = 1
 num_save_visual = 100000
-checkpointing_steps = 688  # smaller dataset -> save more often
+checkpointing_steps = 826  # smaller dataset -> save more often
 
 # Model
 # model_url = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/outputs/0521/14000/model.safetensors"
