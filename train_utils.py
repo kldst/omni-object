@@ -304,6 +304,26 @@ def load_model(cfg: Any, device: torch.device) -> Tuple[OmniVGGT, torch.dtype]:
         else:
             state_dict = torch.hub.load_state_dict_from_url(model_url, map_location="cpu")
         strict = cfg.get("model_load_strict", False)
+        # Even with strict=False, load_state_dict RAISES on a key that exists in both
+        # the checkpoint and the model but has a mismatched shape (e.g. the pose decoder
+        # pos_embedding when switching to object queries: [1,1,1024] -> [1,32,1024]).
+        # That would abort the whole load and silently fall back to "training from
+        # scratch", discarding the warm-start aggregator. So drop shape-mismatched keys
+        # up front and let those parameters keep their fresh init.
+        if not strict:
+            model_sd = model.state_dict()
+            shape_mismatched = [
+                (k, tuple(v.shape), tuple(model_sd[k].shape))
+                for k, v in state_dict.items()
+                if k in model_sd and tuple(model_sd[k].shape) != tuple(v.shape)
+            ]
+            if shape_mismatched:
+                logger.warning(
+                    "Dropping %d shape-mismatched key(s) from checkpoint (kept fresh init): %s",
+                    len(shape_mismatched),
+                    shape_mismatched[:20],
+                )
+                state_dict = {k: v for k, v in state_dict.items() if k not in {m[0] for m in shape_mismatched}}
         incompatible_keys = model.load_state_dict(state_dict, strict=strict)
         missing_keys = list(incompatible_keys.missing_keys)
         unexpected_keys = list(incompatible_keys.unexpected_keys)
