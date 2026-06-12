@@ -149,7 +149,7 @@ lr_object_srt_head = 5e-5
 lr_object_cross_attn = 5e-5
 lr_object_prototype_poolers = 5e-5
 lr_scheduler_type = "cosine_with_warmup"
-warmup_steps = 
+warmup_steps = 0
 eta_min_factor = 5e-5
 
 # Loss
