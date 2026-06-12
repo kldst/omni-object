@@ -47,24 +47,13 @@ object_prototype_layer_indices = (4, 11, 17, 23)
 object_prototype_num_tokens = 32
 
 #* When True, disable the ObjectPrototypePool: the per-layer cross-attention uses the
-# raw (flattened, all-views-concatenated) object patch tokens as context instead of
-# the pooled `object_prototype_num_tokens` prototypes. No learned compression -> the
-# cross-attn context grows from 32 to ~S_obj*P_obj (~5000) tokens per fused layer, so
-# this is much heavier on GPU memory. object_prototype_num_tokens is ignored when on.
 disable_object_prototype_pooler = True
 object_prototype_object_encoder_no_grad = True
 object_cross_attn_heads = 16
 
 #* When True, use a SEPARATE, FROZEN encoder for object reference images instead of the
-# shared scene aggregator. Reason: the scene aggregator is trainable (model_requires_grad
-# = True), so object refs -- which share the same weights -- would drift step over step.
-# A dedicated frozen copy (initialized from the loaded aggregator weights, then frozen)
-# keeps object encodings fixed throughout training. NOTE: object_prototype_object_encoder
-# _no_grad only stops gradients through the object path; it does NOT stop the shared
-# weights from being updated by the scene path -- that is what this flag is for.
-# Trade-off: ~doubles backbone parameter memory (a second full encoder, frozen).
 freeze_object_encoder = True
-freeze_object_encoder_bf16 = True
+freeze_object_encoder_bf16 = False
 
 #* Object-encoder token cache.
 #   Training: OFF (saves GPU memory; train refs use ColorJitter -> non-deterministic,
@@ -181,27 +170,17 @@ train_batch_images = 50
 val_epoch_freq = 1      # eval more often since training data is smaller
 num_workers = 0
 resolution = (518, 476)
-# diverse24 view selection: 0 = near top-down, 5 = front (az 0°/el +20°),
-# 8 = back (az 180°/el +20°), 19 = near bottom-up.  See render_aligned_object_refs_bpy.py
-# DIVERSE_24_SCHEDULE for the full geometry.
 fixed_object_view_ids = (0, 5, 8, 19)
 strict_fixed_object_view_ids = True
 val_max_records_per_dataset = 1000
 
 #* Validation mode: "loss" = current loss/rot_err val over val_dataset;
-# "benchmark" = run the official HouseCat6D mAP benchmark in-process and log to wandb.
 validation_mode = "benchmark"
 benchmark_scenes = ["test_scene1", "test_scene2", "test_scene3", "test_scene4", "test_scene5"]
 benchmark_frame_stride = 1       # subsample frames per scene to bound eval time
 benchmark_batch_size = 1
 benchmark_limit = None           # cap samples/scene for smoke tests (None = full)
-# Benchmark-only object-encoder cache (independent of training's object_encode_cache):
-# eval has no backprop, same object recurs across frames -> big speedup. Toggled on
-# only during the benchmark, then cleared.
 benchmark_object_encode_cache = False
-# Use ColorJitter on benchmark object refs too. NOTE: with the cache ON, this freezes
-# ONE random jitter per object id (cached on first occurrence, reused for all its
-# frames) -- not per-frame augmentation. Set False for clean/deterministic refs.
 benchmark_object_ref_color_jitter = True
 
 # freepose_root = "/mnt/train-data-4-hdd/yian/freepose"
