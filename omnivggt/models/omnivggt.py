@@ -105,7 +105,11 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
                  object_prototype_object_encoder_no_grad=False,
                  object_cross_attn_heads=16,
                  object_encode_cache=False,
-                 object_encode_cache_max=256):
+                 object_encode_cache_max=256,
+                 enable_object_query_pooler=False,
+                 object_query_pooler_num_queries=32,
+                 object_query_aggregation="attention_pool",
+                 attn_mask_supervise_layers=()):
         super().__init__()
         # Object-encoder token cache: the reference-image ViT forward is the most
         # expensive part of object encoding and only depends on the (frozen) shared
@@ -204,6 +208,13 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
                 context_pool=object_pose_context_pool,
                 use_global_scene_object_concat=object_pose_use_global_scene_object_concat,
                 predict_size=enable_object_size,
+                enable_query_pooler=bool(enable_object_query_pooler),
+                num_object_queries=int(object_query_pooler_num_queries),
+                query_aggregation=object_query_aggregation,
+                attn_supervise_layers=tuple(int(idx) for idx in attn_mask_supervise_layers),
+                # Object tokens come from the frozen encoder's per-layer stream (embed_dim),
+                # not the 2*embed_dim aggregated output, so the pooler's K/V dim is embed_dim.
+                object_token_dim=embed_dim,
             )
 
     def _ensure_batched_images(self, images: torch.Tensor): # 確保 batch 維度存在

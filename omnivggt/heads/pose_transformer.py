@@ -127,7 +127,7 @@ class CrossAttention(nn.Module):
             else nn.Identity()
         )
 
-    def forward(self, x, context=None):
+    def forward(self, x, context=None, return_attn=False):
         context = default(context, x)
         k, v = self.to_kv(context).chunk(2, dim=-1)
         q = self.to_q(x)
@@ -137,7 +137,12 @@ class CrossAttention(nn.Module):
         attn = self.dropout(self.attend(dots))
         out = torch.matmul(attn, v)
         out = merge_multihead(out)
-        return self.to_out(out)
+        out = self.to_out(out)
+        if return_attn:
+            # attn: (batch, heads, num_query, num_context). Mean over heads so callers
+            # get a single per-query attention map without holding the per-head tensor.
+            return out, attn.mean(dim=1)
+        return out
 
 
 class Transformer(nn.Module):
@@ -204,16 +209,26 @@ class TransformerCrossAttn(nn.Module):
                 )
             )
 
-    def forward(self, x: torch.Tensor, *args, context=None, context_list=None):
+    def forward(self, x: torch.Tensor, *args, context=None, context_list=None, return_attn=False):
         if context_list is None:
             context_list = [context] * len(self.layers)
         if len(context_list) != len(self.layers):
             raise ValueError(f"len(context_list) != len(self.layers) ({len(context_list)} != {len(self.layers)})")
 
+        attn_maps = [] if return_attn else None
         for i, (self_attn, cross_attn, ff) in enumerate(self.layers):
             x = self_attn(x, *args) + x
-            x = cross_attn(x, *args, context=context_list[i]) + x
+            if return_attn:
+                # PreNorm forwards **kwargs to the wrapped CrossAttention, so
+                # return_attn flows through to produce the per-layer attention map.
+                attn_out, attn_map = cross_attn(x, *args, context=context_list[i], return_attn=True)
+                x = attn_out + x
+                attn_maps.append(attn_map)
+            else:
+                x = cross_attn(x, *args, context=context_list[i]) + x
             x = ff(x, *args) + x
+        if return_attn:
+            return x, attn_maps
         return x
 
 
@@ -350,9 +365,11 @@ class TransformerDecoder(nn.Module):
             context_dim=context_dim,
         )
 
-    def forward(self, inp: torch.Tensor, *args, context=None, context_list=None):
+    def forward(self, inp: torch.Tensor, *args, context=None, context_list=None, return_attn=False):
         x = self.to_token_embedding(inp)
         _, n, _ = x.shape
         x = self.dropout(x)
         x = x + self.pos_embedding[:, :n]
-        return self.transformer(x, *args, context=context, context_list=context_list)
+        return self.transformer(
+            x, *args, context=context, context_list=context_list, return_attn=return_attn
+        )

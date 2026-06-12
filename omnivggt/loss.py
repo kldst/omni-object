@@ -29,7 +29,7 @@ class MultitaskLoss(torch.nn.Module):
     - Tracking loss (not cleaned yet, dirty code is at the bottom of this file)
     """
     def __init__(self, camera=None, depth=None, point=None, track=None, object_mask=None, object_srt=None,
-                 object_presence=None, relative_pose=None,
+                 object_presence=None, relative_pose=None, attn_mask=None,
                  debug_force_model_output_to_ground_truth=False, **kwargs):
         super().__init__()
         # Loss configuration dictionaries for each task
@@ -41,6 +41,7 @@ class MultitaskLoss(torch.nn.Module):
         self.object_srt = object_srt
         self.object_presence = object_presence
         self.relative_pose = relative_pose
+        self.attn_mask = attn_mask
         self.debug_force_model_output_to_ground_truth = bool(debug_force_model_output_to_ground_truth)
 
     def forward(self, predictions, batch) -> torch.Tensor:
@@ -122,7 +123,16 @@ class MultitaskLoss(torch.nn.Module):
                 + object_presence_loss_dict["loss_object_presence"] * self.object_presence["weight"]
             )
             loss_dict.update(object_presence_loss_dict)
-        
+
+        if "object_pose_attn" in predictions and self.attn_mask is not None:
+            attn_mask_loss_dict = compute_attn_mask_loss(
+                predictions,
+                batch,
+                **self.attn_mask,
+            )
+            total_loss = total_loss + attn_mask_loss_dict["loss_attn_mask"] * self.attn_mask["weight"]
+            loss_dict.update(attn_mask_loss_dict)
+
         loss_dict["objective"] = total_loss
 
         return loss_dict
@@ -568,6 +578,72 @@ def compute_object_presence_loss(
     return {
         "loss_object_presence": loss_presence,
         "acc_object_presence": acc,
+    }
+
+
+def compute_attn_mask_loss(
+    predictions,
+    batch,
+    weight=0.5,
+    loss_type="coverage",
+    patch_size=14,
+    eps=1e-6,
+    **kwargs,
+):
+    """Supervise the pose-decoder cross-attention with the GT object mask.
+
+    Coverage loss: for each query, sum the attention mass that lands inside the GT
+    object mask (downsampled to the patch grid) and penalize it for being small:
+        L = mean_q [ -log( sum_{p in mask} attn[q, p] + eps ) ].
+    Attention rows are softmax-normalized over all S*P scene tokens, so in-mask mass
+    is naturally in [0, 1] -- no rescaling needed. Samples with has_object=False are
+    skipped (softmax mass cannot be zero everywhere, so -log would explode).
+    """
+    attn = predictions["object_pose_attn"]  # (B, L, Q, S*P), softmax over the S*P axis
+    gt_mask = batch.get("object_masks", None)
+    if gt_mask is None:
+        dummy = (attn * 0).mean()
+        return {"loss_attn_mask": dummy, "attn_mask_coverage": dummy}
+
+    attn = attn.float()
+    batch_size, num_layers, num_queries, num_keys = attn.shape
+    gt_mask = gt_mask.to(device=attn.device)
+    # gt_mask: (B, S, H, W) -> patch grid (B, S, Hp, Wp) -> flatten to (B, S*Hp*Wp).
+    seq_len, img_h, img_w = gt_mask.shape[1], gt_mask.shape[-2], gt_mask.shape[-1]
+    patch_h, patch_w = img_h // patch_size, img_w // patch_size
+    mask_flat = gt_mask.reshape(batch_size * seq_len, 1, img_h, img_w).float()
+    # adaptive_max_pool: a patch is "object" if it contains any object pixel. This
+    # matches the row-major (Hp then Wp) ordering of the scene patch tokens.
+    mask_patch = F.adaptive_max_pool2d(mask_flat, output_size=(patch_h, patch_w))
+    mask_patch = mask_patch.reshape(batch_size, seq_len * patch_h * patch_w)  # (B, S*P)
+    if mask_patch.shape[1] != num_keys:
+        raise ValueError(
+            f"attn key count {num_keys} != mask patch count {mask_patch.shape[1]} "
+            f"(S={seq_len}, Hp={patch_h}, Wp={patch_w}); pose context_pool must be 'flatten'"
+        )
+
+    has_object = batch.get("has_object", None)
+    if has_object is not None:
+        valid = has_object.to(device=attn.device).reshape(-1).bool()
+        if valid.sum() == 0:
+            dummy = (attn * 0).mean()
+            return {"loss_attn_mask": dummy, "attn_mask_coverage": dummy}
+        attn = attn[valid]
+        mask_patch = mask_patch[valid]
+
+    # In-mask attention mass per (sample, layer, query), then -log coverage.
+    coverage = (attn * mask_patch[:, None, None, :]).sum(dim=-1)  # (B', L, Q)
+    if loss_type == "coverage":
+        loss = (-torch.log(coverage + eps)).mean()
+    elif loss_type == "l1":
+        # Alternative: drive in-mask mass directly toward 1.0.
+        loss = (1.0 - coverage).abs().mean()
+    else:
+        raise ValueError(f"Unknown attn_mask loss_type: {loss_type}")
+
+    return {
+        "loss_attn_mask": loss,
+        "attn_mask_coverage": coverage.mean().detach(),
     }
 
 

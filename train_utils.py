@@ -271,6 +271,16 @@ def load_model(cfg: Any, device: torch.device) -> Tuple[OmniVGGT, torch.dtype]:
         object_cross_attn_heads=cfg.get("object_cross_attn_heads", 16),
         object_encode_cache=cfg.get("object_encode_cache", False),
         object_encode_cache_max=cfg.get("object_encode_cache_max", 256),
+        enable_object_query_pooler=cfg.get("enable_object_query_pooler", False),
+        object_query_pooler_num_queries=cfg.get("object_query_pooler_num_queries", 32),
+        object_query_aggregation=cfg.get("object_query_aggregation", "attention_pool"),
+        # Only have the head return attention maps when the attn-mask loss is on, so
+        # eval / baseline runs don't pay the memory cost.
+        attn_mask_supervise_layers=(
+            cfg.get("attn_mask_supervise_layers", ())
+            if cfg.get("enable_attn_mask_loss", False)
+            else ()
+        ),
     )
 
     # Print network parameters and their indices
@@ -566,6 +576,11 @@ def build_loss_criterion(cfg: Any) -> MultitaskLoss:
             "symmetry_info_path": cfg.get("object_srt_symmetry_info_path", ""),
             "symmetry_continuous_steps": cfg.get("object_srt_symmetry_continuous_steps", 72),
         } if cfg.get("enable_object_srt", False) and cfg.get("relative_pose_loss_weight", 0.0) > 0 else None,
+        attn_mask={
+            "weight": cfg.get("attn_mask_loss_weight", 0.5),
+            "loss_type": cfg.get("attn_mask_loss_type", "coverage"),
+            "patch_size": cfg.get("attn_mask_patch_size", 14),
+        } if cfg.get("enable_attn_mask_loss", False) and cfg.get("enable_object_srt", False) else None,
     )
     
     logger.info("Loss criterion initialized:")
@@ -587,5 +602,11 @@ def build_loss_criterion(cfg: Any) -> MultitaskLoss:
         logger.info(f"  Object mask loss weight: {cfg.get('object_mask_loss_weight', 1.0)}")
     if cfg.get("enable_object_presence", cfg.get("enable_object_srt", False)):
         logger.info(f"  Object presence loss weight: {cfg.get('object_presence_loss_weight', 1.0)}")
-    
+    if cfg.get("enable_attn_mask_loss", False) and cfg.get("enable_object_srt", False):
+        logger.info(
+            f"  Attn-mask loss weight: {cfg.get('attn_mask_loss_weight', 0.5)} "
+            f"(type={cfg.get('attn_mask_loss_type', 'coverage')}, "
+            f"layers={cfg.get('attn_mask_supervise_layers', ())})"
+        )
+
     return criterion
