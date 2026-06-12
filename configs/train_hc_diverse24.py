@@ -149,7 +149,7 @@ lr_object_srt_head = 5e-5
 lr_object_cross_attn = 5e-5
 lr_object_prototype_poolers = 5e-5
 lr_scheduler_type = "cosine_with_warmup"
-warmup_steps = 0
+warmup_steps = 
 eta_min_factor = 5e-5
 
 # Loss
@@ -182,7 +182,7 @@ object_presence_loss_weight = 1.0
 #*   2. CrossAttention/TransformerCrossAttn/TransformerDecoder (pose_transformer.py)
 #*      need an opt-in path to return the selected layers' attn weights (mean over
 #*      heads, kept per query).
-enable_attn_mask_loss = True
+enable_attn_mask_loss = False
 attn_mask_loss_type = "coverage"     # in-mask attention mass, -log(coverage)
 attn_mask_loss_weight = 0.5          # doc: start 0.5-1.0, decay once attention settles
 attn_mask_supervise_layers = (0, 1, 2, 3, 4, 5)  # supervise ALL 6 decoder cross-attn
