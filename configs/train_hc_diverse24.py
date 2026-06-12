@@ -56,7 +56,7 @@ object_cross_attn_heads = 16
 
 #* When True, use a SEPARATE, FROZEN encoder for object reference images instead of the
 freeze_object_encoder = True
-freeze_object_encoder_bf16 = True
+freeze_object_encoder_bf16 = False
 
 #* Object-encoder token cache.
 #   Training: OFF (saves GPU memory; train refs use ColorJitter -> non-deterministic,
