@@ -14,7 +14,7 @@
 #   5. Smaller dataset → faster epoch, so checkpointing_steps reduced to 1000.
 
 output_dir = "outputs"
-exp_name = "hc_only_diverse24_warmstart_14k_0530_regular_cache_0606"
+exp_name = "hc_only_diverse24_14k_0612_no_pooler"
 logging_dir = "logs"
 
 wandb = True
@@ -28,7 +28,7 @@ checkpointing_steps = 688  # smaller dataset -> save more often
 # model_url = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/outputs/0521/14000/model.safetensors"
 model_url = "/omni-object_clone_real/outputs/hc_only_diverse24_warmstart_14k_0530_regular_cache/checkpoint-1-688/model.safetensors"
 model_load_strict = False
-model_requires_grad = False
+model_requires_grad = True
 patch_embed_freeze = True
 load_patch_embed_from_hub = False
 patch_embed_pretrained_path = None
@@ -45,9 +45,28 @@ object_cross_attn_freeze = False
 object_prototype_poolers_freeze = False
 object_prototype_layer_indices = (4, 11, 17, 23)
 object_prototype_num_tokens = 32
+
+#* When True, disable the ObjectPrototypePool: the per-layer cross-attention uses the
+# raw (flattened, all-views-concatenated) object patch tokens as context instead of
+# the pooled `object_prototype_num_tokens` prototypes. No learned compression -> the
+# cross-attn context grows from 32 to ~S_obj*P_obj (~5000) tokens per fused layer, so
+# this is much heavier on GPU memory. object_prototype_num_tokens is ignored when on.
+disable_object_prototype_pooler = True
 object_prototype_object_encoder_no_grad = True
 object_cross_attn_heads = 16
-# Object-encoder token cache.
+
+#* When True, use a SEPARATE, FROZEN encoder for object reference images instead of the
+# shared scene aggregator. Reason: the scene aggregator is trainable (model_requires_grad
+# = True), so object refs -- which share the same weights -- would drift step over step.
+# A dedicated frozen copy (initialized from the loaded aggregator weights, then frozen)
+# keeps object encodings fixed throughout training. NOTE: object_prototype_object_encoder
+# _no_grad only stops gradients through the object path; it does NOT stop the shared
+# weights from being updated by the scene path -- that is what this flag is for.
+# Trade-off: ~doubles backbone parameter memory (a second full encoder, frozen).
+freeze_object_encoder = True
+freeze_object_encoder_bf16 = True
+
+#* Object-encoder token cache.
 #   Training: OFF (saves GPU memory; train refs use ColorJitter -> non-deterministic,
 #             not cache-safe anyway -- see object_ref_color_jitter=True in train_dataset).
 #   Benchmark: ON via benchmark_object_encode_cache below (eval has no backprop
@@ -69,6 +88,12 @@ object_pose_init_params_path = None
 
 # Training
 mixed_precision = "bf16"
+# autocast weight-cast cache. MUST be False when model_requires_grad=True (i.e. the
+# checkpointed aggregator is trainable): with the cache on, the checkpoint recompute
+# pass re-casts weights in a different autocast context than the original forward,
+# producing a mismatched saved-tensor graph -> torch.utils.checkpoint CheckpointError.
+# Off = bit-identical numerics, negligible cost. Safe to leave False always.
+autocast_cache_enabled = False
 seed = 42
 debug = False
 num_train_epochs = 100
@@ -89,17 +114,8 @@ save_each_epoch = False
 val_only = False
 resume_model_path = None
 
-# validate_at_start: run ONE validation pass (here validation_mode="benchmark", so
-# the HouseCat6D mAP benchmark) on the loaded weights BEFORE the training loop, then
-# continue training normally (epoch -> val -> epoch ...). Use this to (re)run the
-# post-epoch-1 benchmark of a saved checkpoint without redoing the epoch.
-#   * To also continue training from where epoch 1 ended, set resume_model_path to the
-#     accelerate checkpoint DIR (e.g. ".../checkpoint-1-688"); load_state restores
-#     optimizer/scheduler/RNG and initial_epoch, so the loop resumes from there.
-#   * To just load weights (training schedule restarts from epoch 0), set model_url to
-#     the model.safetensors instead and leave resume_model_path=None.
-validate_at_start = True
-# resume_model_path = "outputs/hc_only_diverse24_warmstart_14k_0530_regular_cache/checkpoint-1-688"
+
+validate_at_start = False
 
 # Optimizer
 optimizer_type = "adamw"
@@ -107,18 +123,18 @@ adam_beta1 = 0.9
 adam_beta2 = 0.95
 adam_epsilon = 1e-8
 adam_weight_decay = 0.05
-lr = 1e-5
-lr_patch_embed = 1e-5
-lr_camera_head = 1e-5
-lr_depth_head = 1e-5
-lr_point_head = 1e-5
-lr_object_mask_head = 1e-5
-lr_object_srt_head = 1e-5
-lr_object_cross_attn = 1e-5
-lr_object_prototype_poolers = 1e-5
+lr = 1e-4
+lr_patch_embed = 1e-4
+lr_camera_head = 1e-4
+lr_depth_head = 1e-4
+lr_point_head = 1e-4
+lr_object_mask_head = 1e-4
+lr_object_srt_head = 1e-4
+lr_object_cross_attn = 1e-4
+lr_object_prototype_poolers = 1e-4
 lr_scheduler_type = "cosine_with_warmup"
 warmup_steps = 0
-eta_min_factor = 1e-5
+eta_min_factor = 1e-4
 
 # Loss
 camera_loss_weight = 0.0
@@ -143,16 +159,24 @@ object_srt_weight_size = 1.0
 # object_srt_symmetry_info_path = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/mixed_symmetry_info.json"
 object_srt_symmetry_info_path = "/omni-object_clone_real/mixed_symmetry_info.json"
 object_srt_symmetry_continuous_steps = 72
-# SMOC-Net style cross-view relative-pose regularization (requires paired sampling
-# in the dataset, see relative_pose_pairing=True below). Symmetry-aware; reuses the
-# object_srt symmetry table. Keep the weight small -- this is a regularizer.
-relative_pose_loss_weight = 0.1
+
+#* SMOC-Net style cross-view relative-pose regularization (requires paired sampling
+#* in the dataset, see relative_pose_pairing below). Symmetry-aware; reuses the
+#* object_srt symmetry table. Keep the weight small -- this is a regularizer.
+#*
+#* Master switch. When False:
+#*   - relative_pose_loss_weight is forced to 0.0 (the loss branch is not even built);
+#*   - relative_pose_pairing is turned off in train_dataset, so the dataset uses the
+#*     plain BatchedRandomSampler instead of PairedObjectBatchSampler. That removes the
+#*     "train_batch_images must be even" requirement (only the paired sampler needs it).
+enable_relative_pose_loss = False
+relative_pose_loss_weight = 0.1 if enable_relative_pose_loss else 0.0
 relative_pose_weight_rot = 1.0
 relative_pose_weight_trans = 0.0   # translation consistency off by default
 relative_pose_loss_type = "l1"
 
-# Dataset
-train_batch_images = 60
+#* Dataset
+train_batch_images = 30
 # val_batch_images = 60
 val_epoch_freq = 1      # eval more often since training data is smaller
 num_workers = 0
@@ -164,12 +188,12 @@ fixed_object_view_ids = (0, 5, 8, 19)
 strict_fixed_object_view_ids = True
 val_max_records_per_dataset = 1000
 
-# Validation mode: "loss" = current loss/rot_err val over val_dataset;
+#* Validation mode: "loss" = current loss/rot_err val over val_dataset;
 # "benchmark" = run the official HouseCat6D mAP benchmark in-process and log to wandb.
 validation_mode = "benchmark"
 benchmark_scenes = ["test_scene1", "test_scene2", "test_scene3", "test_scene4", "test_scene5"]
 benchmark_frame_stride = 1       # subsample frames per scene to bound eval time
-benchmark_batch_size = 30
+benchmark_batch_size = 1
 benchmark_limit = None           # cap samples/scene for smoke tests (None = full)
 # Benchmark-only object-encoder cache (independent of training's object_encode_cache):
 # eval has no backprop, same object recurs across frames -> big speedup. Toggled on
@@ -219,7 +243,9 @@ train_dataset = (
     # Pair consecutive batch items (2k, 2k+1) as two views of the same static
     # object instance, for the SMOC-Net relative-pose loss. Requires even
     # train_batch_images. pair_min_frame_gap avoids near-identical views.
-    "relative_pose_pairing=True, "
+    # Gated by enable_relative_pose_loss: when off, no paired sampler is used and
+    # train_batch_images is no longer constrained to be even.
+    f"relative_pose_pairing={enable_relative_pose_loss}, "
     "pair_min_frame_gap=20, "
     "seed=42)"
 )

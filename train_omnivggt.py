@@ -17,7 +17,7 @@ from tqdm import tqdm
 import itertools
 
 from accelerate.logging import get_logger
-from accelerate.utils import ProjectConfiguration, set_seed, DistributedDataParallelKwargs, InitProcessGroupKwargs
+from accelerate.utils import ProjectConfiguration, set_seed, DistributedDataParallelKwargs, InitProcessGroupKwargs, AutocastKwargs
 
 from omnivggt.utils.configs import parse_configs
 from omnivggt.datasets.utils.misc import merge_dicts
@@ -648,12 +648,22 @@ if __name__ == '__main__':
         timeout=timedelta(seconds=int(cfg.get("ddp_timeout_seconds", 3600)))
     )
 
+    kwargs_handlers = [ddp_kwargs, init_kwargs]
+
+    # autocast weight-cast cache. Must be OFF when training with gradient
+    # checkpointing (the recompute pass runs in a different autocast context, so a
+    # cached vs re-cast weight changes the saved-tensor graph -> CheckpointError).
+    # See configs comment for autocast_cache_enabled.
+    autocast_cache_enabled = cfg.get("autocast_cache_enabled", True)
+    if not autocast_cache_enabled:
+        kwargs_handlers.append(AutocastKwargs(cache_enabled=False))
+
     accelerator = accelerate.Accelerator(
         mixed_precision=cfg.get("mixed_precision", "no "),
         log_with=cfg.get("report_to", "tensorboard"),
         project_config=accelerator_project_config,
         gradient_accumulation_steps=cfg.get("gradient_accumulation_steps", 1),
-        kwargs_handlers=[ddp_kwargs, init_kwargs],
+        kwargs_handlers=kwargs_handlers,
     )
     
     setup_logging(accelerator)

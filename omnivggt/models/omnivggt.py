@@ -100,6 +100,8 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
                  enable_multi_layer_object_prototype_cross_attn=False,
                  object_prototype_layer_indices=(4, 11, 17, 23),
                  object_prototype_num_tokens=4,
+                 disable_object_prototype_pooler=False,
+                 freeze_object_encoder=False,
                  object_prototype_object_encoder_no_grad=False,
                  object_cross_attn_heads=16,
                  object_encode_cache=False,
@@ -116,14 +118,35 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
         self.object_encode_cache_max = int(object_encode_cache_max)
         self._object_token_cache = OrderedDict()
 
-        self.aggregator = ZeroAggregator(img_size=img_size, patch_size=patch_size, embed_dim=embed_dim, 
+        self.aggregator = ZeroAggregator(img_size=img_size, patch_size=patch_size, embed_dim=embed_dim,
                                          pose_hidden_dim = 9, cam_drop_prob=cam_drop_prob, depth_drop_prob=depth_drop_prob,
                                          always_use_depth_gt=always_use_depth_gt,
                                          patch_embed_pretrained_path=patch_embed_pretrained_path,
                                          load_patch_embed_from_hub=load_patch_embed_from_hub)
+        # Optional separate, frozen encoder used ONLY for object reference images. The
+        # scene aggregator above is trained (object/pose/mask losses), which would
+        # otherwise drift the object-reference encoding step over step, since object and
+        # scene share the same weights. With a dedicated frozen copy, object encodings
+        # stay fixed throughout training. Its weights must be copied from `aggregator`
+        # after the checkpoint load and then frozen (see build_model in train_utils.py).
+        # NOTE: this roughly doubles backbone parameter memory.
+        self.freeze_object_encoder = bool(freeze_object_encoder)
+        self.object_aggregator = None
+        if self.freeze_object_encoder:
+            self.object_aggregator = ZeroAggregator(img_size=img_size, patch_size=patch_size, embed_dim=embed_dim,
+                                                    pose_hidden_dim=9, cam_drop_prob=cam_drop_prob, depth_drop_prob=depth_drop_prob,
+                                                    always_use_depth_gt=always_use_depth_gt,
+                                                    patch_embed_pretrained_path=patch_embed_pretrained_path,
+                                                    load_patch_embed_from_hub=load_patch_embed_from_hub)
         self.enable_multi_layer_object_prototype_cross_attn = bool(enable_multi_layer_object_prototype_cross_attn)
         self.object_prototype_layer_indices = tuple(int(idx) for idx in object_prototype_layer_indices)
         self.object_prototype_num_tokens = int(object_prototype_num_tokens)
+        # When True, skip the ObjectPrototypePool entirely: the cross-attention blocks
+        # use the raw (flattened) object patch tokens as context instead of the 32
+        # pooled prototypes. Heavier (context grows from num_tokens to S_obj*P_obj per
+        # layer) but no learned compression in between. object_prototype_num_tokens is
+        # ignored in this mode.
+        self.disable_object_prototype_pooler = bool(disable_object_prototype_pooler)
         self.object_prototype_object_encoder_no_grad = bool(object_prototype_object_encoder_no_grad)
         self.object_token_cross_attn_blocks = None
         self.object_prototype_poolers = None
@@ -140,17 +163,18 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
                     for layer_idx in progressive_layer_indices
                 }
             )
-            self.object_prototype_poolers = nn.ModuleDict(
-                {
-                    str(layer_idx): ObjectPrototypePool(
-                        dim=embed_dim,
-                        num_prototypes=self.object_prototype_num_tokens,
-                        num_heads=object_cross_attn_heads,
-                        mlp_ratio=4.0,
-                    )
-                    for layer_idx in progressive_layer_indices
-                }
-            )
+            if not self.disable_object_prototype_pooler:
+                self.object_prototype_poolers = nn.ModuleDict(
+                    {
+                        str(layer_idx): ObjectPrototypePool(
+                            dim=embed_dim,
+                            num_prototypes=self.object_prototype_num_tokens,
+                            num_heads=object_cross_attn_heads,
+                            mlp_ratio=4.0,
+                        )
+                        for layer_idx in progressive_layer_indices
+                    }
+                )
         self.camera_head = CameraHead(dim_in=2 * embed_dim) if enable_camera else None
         self.point_head = DPTHead(dim_in=2 * embed_dim, output_dim=4, activation="inv_log", conf_activation="expp1") if enable_point else None
         self.depth_head = DPTHead(dim_in=2 * embed_dim, output_dim=2, activation="exp", conf_activation="expp1") if enable_depth else None
@@ -201,11 +225,16 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
         return tuple(dict.fromkeys(resolved_indices))
 
     def _build_object_prototypes(self, object_layer_tokens: torch.Tensor, object_patch_start_idx: int, layer_idx: int):
-        if self.object_prototype_poolers is None:
-            raise RuntimeError("object_prototype_poolers is not initialized")
         object_patch_tokens = object_layer_tokens[:, :, object_patch_start_idx:, :]
         if object_patch_tokens.numel() == 0:
             raise ValueError("Object patch tokens are empty; cannot build object prototypes")
+        if self.disable_object_prototype_pooler:
+            # No pooling: use the raw object patch tokens (all views concatenated) as
+            # the cross-attention context. (B, S_obj, P_obj, C) -> (B, S_obj*P_obj, C).
+            B, S_obj, P_obj, C = object_patch_tokens.shape
+            return object_patch_tokens.reshape(B, S_obj * P_obj, C)
+        if self.object_prototype_poolers is None:
+            raise RuntimeError("object_prototype_poolers is not initialized")
         return self.object_prototype_poolers[str(layer_idx)](object_patch_tokens)
 
     def _compute_object_layer_tokens(self, object_images: torch.Tensor, requested_layers):
@@ -213,10 +242,13 @@ class OmniVGGT(nn.Module, PyTorchModelHubMixin):
         ``(patch_start_idx, {layer_idx: tokens (B, S_obj, P, C)})``. This is the
         expensive part that the cache stores."""
         B, S_obj, _, H_obj, W_obj = object_images.shape
-        object_patch_tokens = self.aggregator.embed_images(object_images)
+        # Use the dedicated frozen object encoder when enabled, otherwise the shared
+        # (trainable) scene aggregator.
+        encoder = self.object_aggregator if self.object_aggregator is not None else self.aggregator
+        object_patch_tokens = encoder.embed_images(object_images)
         ctx = torch.no_grad() if self.object_prototype_object_encoder_no_grad else nullcontext()
         with ctx:
-            _, object_patch_start_idx, object_layer_tokens = self.aggregator.forward_from_patch_tokens(
+            _, object_patch_start_idx, object_layer_tokens = encoder.forward_from_patch_tokens(
                 object_patch_tokens,
                 batch_size=B,
                 seq_len=S_obj,

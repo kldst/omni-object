@@ -265,6 +265,8 @@ def load_model(cfg: Any, device: torch.device) -> Tuple[OmniVGGT, torch.dtype]:
         enable_multi_layer_object_prototype_cross_attn=cfg.get("enable_multi_layer_object_prototype_cross_attn", False),
         object_prototype_layer_indices=cfg.get("object_prototype_layer_indices", (4, 11, 17, 23)),
         object_prototype_num_tokens=cfg.get("object_prototype_num_tokens", 4),
+        disable_object_prototype_pooler=cfg.get("disable_object_prototype_pooler", False),
+        freeze_object_encoder=cfg.get("freeze_object_encoder", False),
         object_prototype_object_encoder_no_grad=cfg.get("object_prototype_object_encoder_no_grad", False),
         object_cross_attn_heads=cfg.get("object_cross_attn_heads", 16),
         object_encode_cache=cfg.get("object_encode_cache", False),
@@ -320,7 +322,26 @@ def load_model(cfg: Any, device: torch.device) -> Tuple[OmniVGGT, torch.dtype]:
     
     # Set requires_grad
     model.requires_grad_(cfg.get("model_requires_grad", True))
-    
+
+    # Separate frozen object encoder: copy the just-loaded (trainable) aggregator
+    # weights into object_aggregator, then freeze it so object reference encodings stay
+    # fixed while the scene aggregator trains. Done after requires_grad_ so the freeze
+    # sticks; build_optimizer only collects requires_grad=True params, so these stay out
+    # of the optimizer.
+    if getattr(model, "object_aggregator", None) is not None:
+        model.object_aggregator.load_state_dict(model.aggregator.state_dict())
+        # Frozen -> never updated, so storing it in bf16 is safe and halves its resident
+        # weight memory (~3.74GB fp32 -> ~1.87GB bf16 for the 936M-param aggregator).
+        if cfg.get("freeze_object_encoder_bf16", False):
+            model.object_aggregator.to(torch.bfloat16)
+        for param in model.object_aggregator.parameters():
+            param.requires_grad = False
+        model.object_aggregator.eval()
+        logger.info(
+            "Initialized separate frozen object encoder from aggregator weights (dtype=%s).",
+            "bfloat16" if cfg.get("freeze_object_encoder_bf16", False) else "float32",
+        )
+
     # Determine weight dtype
     weight_dtype = torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16
     logger.info(f"Using weight dtype: {weight_dtype}")
