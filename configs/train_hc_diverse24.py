@@ -17,7 +17,7 @@ output_dir = "outputs"
 # 0612 object-query 修改版 (see calude_md/claude(1).md): query pooler + object-conditioned
 # pose decoder queries + attn mask loss. New exp_name so the no_pooler baseline outputs
 # are not overwritten.
-exp_name = "hc_only_diverse24_14k_0612_objquery"
+exp_name = "hc_only_diverse24_14k_0612_objquery_no_atten"
 logging_dir = "logs"
 
 wandb = True
