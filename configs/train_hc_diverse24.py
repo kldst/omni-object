@@ -19,7 +19,7 @@ output_dir = "outputs"
 # (enable_object_query_pooler=False). attn mask loss and zero-init gate also stay off.
 # Distinct exp_name so neither the objquery run nor the original no_pooler baseline
 # outputs are overwritten (see calude_md/claude(1).md).
-exp_name = "hc_only_diverse24_14k_0612_no_pooler_revert"
+exp_name = "hc_only_diverse24_14k_0612_no_pooler_revert_no_relative"
 logging_dir = "logs"
 
 wandb = True
@@ -27,12 +27,12 @@ tensorboard = False
 report_to = "tensorboard"
 num_save_log = 1
 num_save_visual = 100000
-checkpointing_steps = 826  # smaller dataset -> save more often
+checkpointing_steps = 1240  # smaller dataset -> save more often
 
 # Model
 # model_url = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/outputs/0521/14000/model.safetensors"
-model_url = "/omni-object_clone_real/outputs/oo9d_real275_ycbv_hc_camera_pose_size_mask_presence_0528/checkpoint-0-4000/model.safetensors"
-# model_url = "/all_data/model.safetensors"
+# model_url = "/omni-object_clone_real/outputs/oo9d_real275_ycbv_hc_camera_pose_size_mask_presence_0528/checkpoint-0-4000/model.safetensors"
+model_url = "/omni_vggt/checkpoint-0-4000/model.safetensors"
 model_load_strict = False
 model_requires_grad = True
 patch_embed_freeze = True
@@ -212,7 +212,7 @@ object_srt_symmetry_continuous_steps = 72
 #*   - relative_pose_pairing is turned off in train_dataset, so the dataset uses the
 #*     plain BatchedRandomSampler instead of PairedObjectBatchSampler. That removes the
 #*     "train_batch_images must be even" requirement (only the paired sampler needs it).
-enable_relative_pose_loss = True
+enable_relative_pose_loss = False
 relative_pose_loss_weight = 0.1 if enable_relative_pose_loss else 0.0
 relative_pose_weight_rot = 1.0
 relative_pose_weight_trans = 0.0   # translation consistency off by default
