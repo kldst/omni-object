@@ -31,7 +31,8 @@ checkpointing_steps = 826  # smaller dataset -> save more often
 
 # Model
 # model_url = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/outputs/0521/14000/model.safetensors"
-model_url = "/omni-object_clone_real/outputs/oo9d_real275_ycbv_hc_camera_pose_size_mask_presence_0528/checkpoint-0-4000/model.safetensors"
+# model_url = "/omni-object_clone_real/outputs/oo9d_real275_ycbv_hc_camera_pose_size_mask_presence_0528/checkpoint-0-4000/model.safetensors"
+model_url = "/all_data/model.safetensors"
 model_load_strict = False
 model_requires_grad = True
 patch_embed_freeze = True
