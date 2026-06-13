@@ -211,7 +211,7 @@ object_srt_symmetry_continuous_steps = 72
 #*   - relative_pose_pairing is turned off in train_dataset, so the dataset uses the
 #*     plain BatchedRandomSampler instead of PairedObjectBatchSampler. That removes the
 #*     "train_batch_images must be even" requirement (only the paired sampler needs it).
-enable_relative_pose_loss = False
+enable_relative_pose_loss = True
 relative_pose_loss_weight = 0.1 if enable_relative_pose_loss else 0.0
 relative_pose_weight_rot = 1.0
 relative_pose_weight_trans = 0.0   # translation consistency off by default
