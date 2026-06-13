@@ -14,10 +14,12 @@
 #   5. Smaller dataset → faster epoch, so checkpointing_steps reduced to 1000.
 
 output_dir = "outputs"
-# 0612 object-query 修改版 (see calude_md/claude(1).md): query pooler + object-conditioned
-# pose decoder queries + attn mask loss. New exp_name so the no_pooler baseline outputs
-# are not overwritten.
-exp_name = "hc_only_diverse24_14k_0612_objquery_no_atten"
+# 0612: REVERTED to the no_pooler baseline -- query pooler + object-conditioned pose
+# decoder queries gave no measurable benefit, so both are turned off
+# (enable_object_query_pooler=False). attn mask loss and zero-init gate also stay off.
+# Distinct exp_name so neither the objquery run nor the original no_pooler baseline
+# outputs are overwritten (see calude_md/claude(1).md).
+exp_name = "hc_only_diverse24_14k_0612_no_pooler_revert"
 logging_dir = "logs"
 
 wandb = True
@@ -29,7 +31,7 @@ checkpointing_steps = 826  # smaller dataset -> save more often
 
 # Model
 # model_url = "/mnt/train-data-4-hdd/yian/freepose/omni-object_clone/outputs/0521/14000/model.safetensors"
-model_url = "/omni-object_clone_real/outputs/hc_only_diverse24_warmstart_14k_0530_regular_cache/checkpoint-1-688/model.safetensors"
+model_url = "/omni-object_clone_real/outputs/oo9d_real275_ycbv_hc_camera_pose_size_mask_presence_0528/checkpoint-0-4000/model.safetensors"
 model_load_strict = False
 model_requires_grad = True
 patch_embed_freeze = True
@@ -79,20 +81,21 @@ object_pose_ief_iters = 1
 object_pose_init_params_path = None
 
 #* ---- 0612 object-query modifications (calude_md/claude(1).md) ----
-#* Query Pooler: 32 learnable seeds attention-pool the LAYER-23 object tokens from the
-#* frozen object encoder into object-conditioned queries (B, 32, 1024) for the pose
-#* decoder. This is SEPARATE from the disabled per-layer K/V poolers above: the 4
-#* aggregator cross-attn injections keep using the raw flattened object tokens
-#* (no_pooler unchanged). Implementation note: OmniVGGT already passes the layer-23
-#* object tokens to the pose head as `object_tokens` (omnivggt.py:454), so the pooler
-#* should live INSIDE ObjectPoseHead -- its params then ride the existing
-#* lr_object_srt_head param group; no new lr flag needed.
-enable_object_query_pooler = True
+#* REVERTED back to the no_pooler baseline: query pooler + pose-decoder query
+#* replacement gave no measurable benefit, so both are turned OFF. With
+#* enable_object_query_pooler=False the ObjectPoseHead builds the original
+#* TransformerDecoder(num_tokens=1, token_dim=1) single learnable query
+#* (object_pose_head.py:171-186) and the ObjectQueryPooler module is not even
+#* constructed. The implementation stays in the codebase, just dormant.
+#*
+#* Query Pooler (when re-enabled): 32 learnable seeds attention-pool the LAYER-23
+#* object tokens into object-conditioned pose-decoder queries (B, 32, 1024). This is
+#* SEPARATE from the disabled per-layer K/V poolers above: the 4 aggregator cross-attn
+#* injections always use the raw flattened object tokens (no_pooler unchanged).
+enable_object_query_pooler = False
 object_query_pooler_num_queries = 32
-#* Pose decoder query replacement: the single zero-token query (TransformerDecoder
-#* num_tokens=1, token_dim=1) becomes the 32 object queries (use
-#* skip_token_embedding=True, token_dim=dim=1024). Decoder output aggregation before
-#* decpose/dectranslate/decsize/presence_branch: "attention_pool" | "pose_token".
+#* Pose decoder query aggregation (only used when enable_object_query_pooler=True):
+#* "attention_pool" | "pose_token". Ignored while the pooler is off.
 object_query_aggregation = "attention_pool"
 
 #* Zero-init tanh(alpha) gate on the 4 cross-attn injection layers. Kept OFF on
@@ -102,9 +105,9 @@ object_query_aggregation = "attention_pool"
 #* warm-starting from a checkpoint whose cross-attn blocks are newly initialized.
 object_cross_attn_zero_gate = False
 
-# Training
+#* Training
 mixed_precision = "bf16"
-# autocast weight-cast cache. MUST be False when model_requires_grad=True (i.e. the
+#* autocast weight-cast cache. MUST be False when model_requires_grad=True (i.e. the
 # checkpointed aggregator is trainable): with the cache on, the checkpoint recompute
 # pass re-casts weights in a different autocast context than the original forward,
 # producing a mismatched saved-tensor graph -> torch.utils.checkpoint CheckpointError.
@@ -139,18 +142,18 @@ adam_beta1 = 0.9
 adam_beta2 = 0.95
 adam_epsilon = 1e-8
 adam_weight_decay = 0.05
-lr = 5e-5
-lr_patch_embed = 5e-5
-lr_camera_head = 5e-5
-lr_depth_head = 5e-5
-lr_point_head = 5e-5
-lr_object_mask_head = 5e-5
-lr_object_srt_head = 5e-5
-lr_object_cross_attn = 5e-5
-lr_object_prototype_poolers = 5e-5
+lr = 1e-5
+lr_patch_embed = 1e-5
+lr_camera_head = 1e-5
+lr_depth_head = 1e-5
+lr_point_head = 1e-5
+lr_object_mask_head = 1e-5
+lr_object_srt_head = 1e-5
+lr_object_cross_attn = 1e-5
+lr_object_prototype_poolers = 1e-5
 lr_scheduler_type = "cosine_with_warmup"
 warmup_steps = 0
-eta_min_factor = 5e-5
+eta_min_factor = 1e-5
 
 # Loss
 camera_loss_weight = 0.0
